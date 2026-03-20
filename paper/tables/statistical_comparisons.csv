@@ -1,0 +1,7 @@
+method_a,method_b,mean_delta,p_value,significant_005,n_folds
+baseline,smote,0.0026813700958031594,0.5002,False,4
+baseline,ctgan,0.006466644801020438,0.245,False,4
+baseline,tabddpm,0.000767634424356789,1.0,False,4
+ctgan,smote,-0.0037852747052172786,0.1202,False,4
+tabddpm,smote,0.0019137356714463705,0.7462,False,4
+tabddpm,ctgan,0.005699010376663649,0.6237,False,4

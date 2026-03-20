@@ -1,0 +1,98 @@
+
+[RUNTIME ESTIMATE] ~50 min (0h 50m) (mode=quick)
+
+Saved config -> results/protocol/config.json
+Loading: /Users/yasasvikaipa/Downloads/fraud-synth-icml/data/train_merged.parquet
+Total rows: 590540
+Preprocessed: 101 cols (was 430+), 100 features
+Running 2 temporal folds (using 3 time chunks)
+
+============================================================
+===== FOLD 0 =====
+[INFO] Fold 0: applied delay_days=14, train_rows 196846 -> 155664, train_pos=4182
+[LightGBM] [Warning] min_data_in_leaf is set=200, min_child_samples=20 will be ignored. Current value: min_data_in_leaf=200
+[LightGBM] [Warning] min_data_in_leaf is set=200, min_child_samples=20 will be ignored. Current value: min_data_in_leaf=200
+[LightGBM] [Info] Number of positive: 4182, number of negative: 151482
+[LightGBM] [Info] Auto-choosing row-wise multi-threading, the overhead of testing was 0.046357 seconds.
+You can set `force_row_wise=true` to remove the overhead.
+And if memory is not enough, you can set `force_col_wise=true`.
+[LightGBM] [Info] Total Bins 8981
+[LightGBM] [Info] Number of data points in the train set: 155664, number of used features: 100
+[LightGBM] [Info] [binary:BoostFromScore]: pavg=0.026866 -> initscore=-3.589677
+[LightGBM] [Info] Start training from score -3.589677
+[LightGBM] [Warning] min_data_in_leaf is set=200, min_child_samples=20 will be ignored. Current value: min_data_in_leaf=200
+BASELINE PR-AUC: 0.5076, Recall@1%FPR: 0.4174
+
+--------------------------------------------------
+[CTGAN] target_pos_rate=0.05
+[CTGAN] n_pos=4182 (gen), n_pos_full=4182, n_neg=151482, target_pos=8193, synth_add=4011
+[CTGAN] Training rows: 4182 | cols: 100 | pac=1 | batch_size=512
+[CTGAN] discrete cols: 25 | continuous cols: 75
+[CTGAN] Sampling chunk 1: 4011 rows (remaining after: 0)
+[LightGBM] [Warning] min_data_in_leaf is set=200, min_child_samples=20 will be ignored. Current value: min_data_in_leaf=200
+[LightGBM] [Warning] min_data_in_leaf is set=200, min_child_samples=20 will be ignored. Current value: min_data_in_leaf=200
+[LightGBM] [Info] Number of positive: 8193, number of negative: 151482
+[LightGBM] [Info] Auto-choosing row-wise multi-threading, the overhead of testing was 0.046783 seconds.
+You can set `force_row_wise=true` to remove the overhead.
+And if memory is not enough, you can set `force_col_wise=true`.
+[LightGBM] [Info] Total Bins 18599
+[LightGBM] [Info] Number of data points in the train set: 159675, number of used features: 100
+[LightGBM] [Info] [binary:BoostFromScore]: pavg=0.051310 -> initscore=-2.917187
+[LightGBM] [Info] Start training from score -2.917187
+[LightGBM] [Warning] min_data_in_leaf is set=200, min_child_samples=20 will be ignored. Current value: min_data_in_leaf=200
+CTGAN+REAL PR-AUC: 0.5136, Recall@1%FPR: 0.4182
+
+--------------------------------------------------
+[TabDDPM] target_pos_rate=0.05
+[TabDDPM] n_pos=4182 (gen), n_pos_full=4182, n_neg=151482, synth_add=4011
+[TabDDPM] Training rows: 4182 | features=155 | cat=25 | cont=75
+[TabDDPM] Epoch 1/3 | loss=1.0037
+[TabDDPM] Epoch 2/3 | loss=1.0027
+[TabDDPM] Epoch 3/3 | loss=0.9965
+Sample timestep   49Sample timestep   48Sample timestep   47Sample timestep   46Sample timestep   45Sample timestep   44Sample timestep   43Sample timestep   42Sample timestep   41Sample timestep   40Sample timestep   39Sample timestep   38Sample timestep   37Sample timestep   36Sample timestep   35Sample timestep   34Sample timestep   33Sample timestep   32Sample timestep   31Sample timestep   30Sample timestep   29Sample timestep   28Sample timestep   27Sample timestep   26Sample timestep   25Sample timestep   24Sample timestep   23Sample timestep   22Sample timestep   21Sample timestep   20Sample timestep   19Sample timestep   18Sample timestep   17Sample timestep   16Sample timestep   15Sample timestep   14Sample timestep   13Sample timestep   12Sample timestep   11Sample timestep   10Sample timestep    9Sample timestep    8Sample timestep    7Sample timestep    6Sample timestep    5Sample timestep    4Sample timestep    3Sample timestep    2Sample timestep    1Sample timestep    0
+[LightGBM] [Warning] min_data_in_leaf is set=200, min_child_samples=20 will be ignored. Current value: min_data_in_leaf=200
+[LightGBM] [Warning] min_data_in_leaf is set=200, min_child_samples=20 will be ignored. Current value: min_data_in_leaf=200
+[LightGBM] [Info] Number of positive: 8193, number of negative: 151482
+[LightGBM] [Info] Auto-choosing row-wise multi-threading, the overhead of testing was 0.046860 seconds.
+You can set `force_row_wise=true` to remove the overhead.
+And if memory is not enough, you can set `force_col_wise=true`.
+[LightGBM] [Info] Total Bins 19234
+[LightGBM] [Info] Number of data points in the train set: 159675, number of used features: 100
+[LightGBM] [Info] [binary:BoostFromScore]: pavg=0.051310 -> initscore=-2.917187
+[LightGBM] [Info] Start training from score -2.917187
+[LightGBM] [Warning] min_data_in_leaf is set=200, min_child_samples=20 will be ignored. Current value: min_data_in_leaf=200
+TabDDPM+REAL PR-AUC: 0.5032, Recall@1%FPR: 0.3994
+
+--------------------------------------------------
+[SMOTE] target_pos_rate=0.05
+SMOTE PR-AUC: 0.5166, Recall@1%FPR: 0.4269
+
+============================================================
+===== FOLD 1 =====
+[INFO] Fold 1: applied delay_days=14, train_rows 393693 -> 351729, train_pos=11898
+BASELINE PR-AUC: 0.5279, Recall@1%FPR: 0.4346
+
+--------------------------------------------------
+[CTGAN] target_pos_rate=0.05
+[CTGAN] n_pos=11898 (gen), n_pos_full=11898, n_neg=339831, target_pos=16898, synth_add=5000
+[CTGAN] Training rows: 11898 | cols: 100 | pac=1 | batch_size=512
+[CTGAN] discrete cols: 25 | continuous cols: 75
+[CTGAN] Sampling chunk 1: 5000 rows (remaining after: 0)
+CTGAN+REAL PR-AUC: 0.5316, Recall@1%FPR: 0.4536
+
+--------------------------------------------------
+[TabDDPM] target_pos_rate=0.05
+[TabDDPM] n_pos=11898 (gen), n_pos_full=11898, n_neg=339831, synth_add=5000
+[TabDDPM] Training rows: 11898 | features=156 | cat=25 | cont=75
+[TabDDPM] Epoch 1/3 | loss=0.9980
+[TabDDPM] Epoch 2/3 | loss=0.9877
+[TabDDPM] Epoch 3/3 | loss=0.9785
+Sample timestep   49Sample timestep   48Sample timestep   47Sample timestep   46Sample timestep   45Sample timestep   44Sample timestep   43Sample timestep   42Sample timestep   41Sample timestep   40Sample timestep   39Sample timestep   38Sample timestep   37Sample timestep   36Sample timestep   35Sample timestep   34Sample timestep   33Sample timestep   32Sample timestep   31Sample timestep   30Sample timestep   29Sample timestep   28Sample timestep   27Sample timestep   26Sample timestep   25Sample timestep   24Sample timestep   23Sample timestep   22Sample timestep   21Sample timestep   20Sample timestep   19Sample timestep   18Sample timestep   17Sample timestep   16Sample timestep   15Sample timestep   14Sample timestep   13Sample timestep   12Sample timestep   11Sample timestep   10Sample timestep    9Sample timestep    8Sample timestep    7Sample timestep    6Sample timestep    5Sample timestep    4Sample timestep    3Sample timestep    2Sample timestep    1Sample timestep    0
+Sample timestep   49Sample timestep   48Sample timestep   47Sample timestep   46Sample timestep   45Sample timestep   44Sample timestep   43Sample timestep   42Sample timestep   41Sample timestep   40Sample timestep   39Sample timestep   38Sample timestep   37Sample timestep   36Sample timestep   35Sample timestep   34Sample timestep   33Sample timestep   32Sample timestep   31Sample timestep   30Sample timestep   29Sample timestep   28Sample timestep   27Sample timestep   26Sample timestep   25Sample timestep   24Sample timestep   23Sample timestep   22Sample timestep   21Sample timestep   20Sample timestep   19Sample timestep   18Sample timestep   17Sample timestep   16Sample timestep   15Sample timestep   14Sample timestep   13Sample timestep   12Sample timestep   11Sample timestep   10Sample timestep    9Sample timestep    8Sample timestep    7Sample timestep    6Sample timestep    5Sample timestep    4Sample timestep    3Sample timestep    2Sample timestep    1Sample timestep    0
+TabDDPM+REAL PR-AUC: 0.5264, Recall@1%FPR: 0.4443
+
+--------------------------------------------------
+[SMOTE] target_pos_rate=0.05
+SMOTE PR-AUC: 0.5282, Recall@1%FPR: 0.4423
+
+[DONE] Total elapsed: 3m 39s

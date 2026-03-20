@@ -1,0 +1,15 @@
+{
+  "run_id": "20260224_101041",
+  "mode": "medium",
+  "recency_ablation": true,
+  "delay_days": 0,
+  "command": "/Users/yasasvikaipa/Downloads/fraud-synth-icml/src/run_protocol.py --medium --recency-ablation",
+  "start_time": "24-02-2026 10:10",
+  "target_col": "isFraud",
+  "time_col": "TransactionDT",
+  "n_folds": 4,
+  "target_pos_rates": [0.05, 0.1, 0.2],
+  "max_synth_pos": 50000,
+  "results_source": "results/protocol/run_20260224_101041/results.csv",
+  "frozen_at": "2026-02-24"
+}

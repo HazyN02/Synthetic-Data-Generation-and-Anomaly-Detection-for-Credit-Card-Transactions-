@@ -1,0 +1,6 @@
+Run ID: 20260303_131220
+Mode: medium
+Estimated runtime: ~368 min (6h 8m)
+Results: results/protocol/run_20260303_131220/results.csv
+Config: results/protocol/run_20260303_131220/config.json
+Actual elapsed: 44m 4s

@@ -1,0 +1,5 @@
+fold,baseline_pr_auc,baseline_recall_1pctfpr,ctgan_pr_auc,ctgan_recall_1pctfpr
+0,0.5558,0.4567,0.4759,0.3939
+1,0.5756,0.4878,0.5521,0.4655
+2,0.6105,0.507,0.5762,0.465
+3,0.5368,0.4417,0.5154,0.4316

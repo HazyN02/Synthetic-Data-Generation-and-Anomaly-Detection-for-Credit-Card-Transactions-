@@ -1,0 +1,7 @@
+method,mean_delta,folds_helps,folds_neutral,folds_hurts,verdict
+ctgan,-0.006466644801020438,1,3,0,neutral
+tabddpm,-0.000767634424356789,1,2,1,neutral
+smote,-0.0026813700958031594,0,4,0,neutral
+ctgan_recency03,-0.005392076332076112,1,3,0,neutral
+tabddpm_recency03,-0.0003607583033524153,1,2,1,neutral
+smote_recency03,0.012360516247863995,0,2,2,hurts

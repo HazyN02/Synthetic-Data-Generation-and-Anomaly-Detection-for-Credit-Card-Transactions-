@@ -1,0 +1,8 @@
+method,pr_auc_mean,pr_auc_std,recall_mean
+baseline,0.5639,0.031,0.4715
+ctgan,0.5704,0.0268,0.4777
+ctgan_recency03,0.5693,0.0247,0.4777
+smote,0.5666,0.0243,0.4759
+smote_recency03,0.5516,0.0311,0.4696
+tabddpm,0.5647,0.0289,0.4718
+tabddpm_recency03,0.5643,0.026,0.4707

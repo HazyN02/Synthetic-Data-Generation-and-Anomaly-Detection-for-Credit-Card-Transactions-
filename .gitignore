@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data (download from Kaggle - too large for repo)
+data/*.csv
+data/*.parquet
+!data/.gitkeep
+
+# Large results backups (optional - keep summary CSVs)
+results/protocol/*.bak
+results/protocol/results_backup_*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Matplotlib
+*.matplotlib/
+
+# Misc
+*.log
+.env
+.env.local
+
+# Local analysis / exports (optional - remove to include)
+Fraud dataset project approach.html
