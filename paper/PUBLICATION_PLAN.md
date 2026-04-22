@@ -88,7 +88,7 @@ Run SMOTE **inside the protocol** on the same `preprocess_for_synth` output. All
 
 ### 3.1 Correct Abstract (Draft)
 
-> **When Synthetic Oversampling Helps or Hurts Rare-Event Fraud Detection Under Temporal Shift**
+> **Fidelity or Illusion: Why Synthetic Oversampling Benchmarks for Fraud Detection Cannot Be Trusted**
 >
 > Credit card fraud detection faces extreme class imbalance and non-stationary data. A common mitigation is synthetic oversampling (SMOTE, CTGAN, TabDDPM). We ask: *when does synthetic oversampling improve fraud detection under realistic temporal evaluation?*
 >

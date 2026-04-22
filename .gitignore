@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.pyc
 .Python
 .venv/
 venv/
@@ -15,6 +16,7 @@ build/
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb_checkpoints
+src/.ipynb_checkpoints/
 
 # IDE
 .idea/
@@ -25,9 +27,15 @@ build/
 # Data (download from Kaggle - too large for repo)
 data/*.csv
 data/*.parquet
+data/*.pkl
 !data/.gitkeep
+!data/README.md
 
-# Large results backups (optional - keep summary CSVs)
+# Large pickles and binaries anywhere in results
+results/**/*.pkl
+results/**/*.joblib
+
+# Large results backups
 results/protocol/*.bak
 results/protocol/results_backup_*.csv
 
@@ -38,10 +46,12 @@ Thumbs.db
 # Matplotlib
 *.matplotlib/
 
-# Misc
+# Logs (runtime artefacts — not source)
 *.log
+
+# Secrets / env
 .env
 .env.local
 
-# Local analysis / exports (optional - remove to include)
+# Local analysis / exports
 Fraud dataset project approach.html

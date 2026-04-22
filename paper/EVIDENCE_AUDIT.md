@@ -12,7 +12,7 @@ This document verifies that every claim in the paper is backed by tables, figure
 | CTGAN: +2.67 PR-AUC points | 0.0267 = 2.67 when expressed as points | statistical_comparisons.csv (baseline vs ctgan, mean_delta) |
 | TabDDPM: +2.10 | 0.0210 = 2.10 | statistical_comparisons.csv |
 | SMOTE: +2.29 | 0.0229 = 2.29 | statistical_comparisons.csv |
-| None significant (p ≥ 0.12) | All p-values ≥ 0.12 | statistical_comparisons.csv |
+| CTGAN significant (p = 0.045); SMOTE/TVAE/TabDDPM not significant | 8-fold sign test results | significance_tests_8fold.csv |
 | r ≈ -0.89 for CTGAN drift-harm | Correlation computed in run_unified_analysis | drift_harm_analysis.csv + run_unified_analysis.py |
 | SMOTE recency is neutral overall | smote_recency03 verdict: neutral (hurts in 1 fold) | when_it_helps_hurts.csv |
 

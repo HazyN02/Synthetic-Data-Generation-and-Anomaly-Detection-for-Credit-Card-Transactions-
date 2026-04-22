@@ -1,4 +1,4 @@
-# Paper: When Synthetic Oversampling Helps or Hurts Rare-Event Fraud Detection
+# Paper: Fidelity or Illusion: Why Synthetic Oversampling Benchmarks for Fraud Detection Cannot Be Trusted
 
 ## Structure (canonical order)
 
