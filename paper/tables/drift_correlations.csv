@@ -1,0 +1,4 @@
+method,pearson_r,n_folds
+ctgan,-0.892,4
+tabddpm,-0.803,4
+smote,-0.864,4

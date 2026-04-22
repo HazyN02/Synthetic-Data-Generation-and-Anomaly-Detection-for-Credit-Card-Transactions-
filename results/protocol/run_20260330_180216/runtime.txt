@@ -1,0 +1,6 @@
+Run ID: 20260330_180216
+Mode: full
+Estimated runtime: ~1216 min (20h 16m)
+Results: results/protocol/run_20260330_180216/results.csv
+Config: results/protocol/run_20260330_180216/config.json
+Actual elapsed: 425m 23s

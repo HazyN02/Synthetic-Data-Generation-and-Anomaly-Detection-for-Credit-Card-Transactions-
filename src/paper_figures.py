@@ -100,7 +100,7 @@ def fig_drift_vs_harm():
     ax.axhline(0, color="gray", linestyle="--", alpha=0.5)
     ax.set_xlabel("Domain AUC (train vs val separation)")
     ax.set_ylabel("PR-AUC delta (baseline − method)")
-    ax.set_title("Higher drift → more harm from synthetic oversampling")
+    ax.set_title("Drift vs oversampling effect (negative = benefit)")
     ax.legend()
     fig.tight_layout()
     fig.savefig(os.path.join(FIGURES_DIR, "drift_vs_harm.pdf"), dpi=150)

@@ -25,6 +25,7 @@ from src.synth_ctgan import make_synthetic_positives
 from src.synth_tabddpm import make_synthetic_positives_tabddpm
 from src.synth_smote import train_and_eval_smote
 from src.preprocess_synth import preprocess_fold, get_cat_cols_for_synth
+from fidelity_eval import fidelity_summary, filter_by_dcr
 
 
 
@@ -49,15 +50,21 @@ CATEGORICAL_COLS = [
 ]
 
 # Default: full run
-N_FOLDS = 4
+N_FOLDS = 8
 TARGET_POS_RATES = [0.05, 0.10, 0.20]
 MAX_SYNTH_POS = 50000
-CTGAN_EPOCHS = 10
-CTGAN_BATCH_SIZE = 512  # Larger batch = faster (if memory allows)
+CTGAN_EPOCHS = 150
+CTGAN_BATCH_SIZE = 500
+CTGAN_DISCRIMINATOR_STEPS = 5
 CTGAN_PAC = 1
 CTGAN_SEED = 0
 TABDDPM_SEED = 0
-# TabDDPM defaults: timesteps=100, epochs=5, hidden=[1024,1024]
+# Full-protocol TabDDPM (used when mode is full / default)
+TABDDPM_FULL_KWARGS: Dict[str, Any] = {
+    "timesteps": 1000,
+    "epochs": 50,
+    "hidden_dims": [512, 512, 512],
+}
 
 # Where to save (organized by model)
 RESULTS_DIR = "results"
@@ -65,6 +72,7 @@ PROTOCOL_DIR = os.path.join(RESULTS_DIR, "protocol")
 RESULTS_CSV = os.path.join(PROTOCOL_DIR, "results.csv")
 CONFIG_JSON = os.path.join(PROTOCOL_DIR, "config.json")
 RUNTIME_ESTIMATE_TXT = os.path.join(PROTOCOL_DIR, "runtime_estimate.txt")
+FIDELITY_RESULTS_CSV = os.path.join(PROTOCOL_DIR, "fidelity_results.csv")
 
 # ----------------------------
 # HELPERS
@@ -131,6 +139,25 @@ def main():
         default=None,
         help="Override target_pos_rates (comma-separated, e.g. 0.03,0.05,0.10,0.15,0.20) for sensitivity ablation.",
     )
+    parser.add_argument(
+        "--resume-run-id",
+        type=str,
+        default=None,
+        help="Resume an existing run directory id (e.g. 20260330_180216).",
+    )
+    parser.add_argument(
+        "--resume-start-fold",
+        type=int,
+        default=0,
+        help="When resuming, start from this fold index.",
+    )
+    parser.add_argument(
+        "--resume-start-method",
+        type=str,
+        default="baseline",
+        choices=["baseline", "ctgan", "tabddpm", "smote"],
+        help="When resuming start-fold, begin from this method block.",
+    )
     args = parser.parse_args()
 
     delay_days = max(0, int(getattr(args, "delay_days", 0)))
@@ -152,7 +179,7 @@ def main():
         max_synth = MAX_SYNTH_POS
         ctgan_epochs = CTGAN_EPOCHS
         ctgan_per_run, tabddpm_per_run = 15, 35
-        tabddpm_kwargs = {}
+        tabddpm_kwargs = dict(TABDDPM_FULL_KWARGS)
     elif args.medium:
         mode = "medium"
         n_folds = N_FOLDS
@@ -177,7 +204,7 @@ def main():
         max_synth = MAX_SYNTH_POS
         ctgan_epochs = CTGAN_EPOCHS
         ctgan_per_run, tabddpm_per_run = 15, 35
-        tabddpm_kwargs = {}
+        tabddpm_kwargs = dict(TABDDPM_FULL_KWARGS)
 
     if getattr(args, "target_pos_rates", None):
         try:
@@ -187,23 +214,40 @@ def main():
 
     _ensure_results_dir()
 
+    resume_run_id = getattr(args, "resume_run_id", None)
+    resume_start_fold = int(getattr(args, "resume_start_fold", 0))
+    resume_start_method = str(getattr(args, "resume_start_method", "baseline"))
+
     # Timestamped run dir for full/medium (reproducibility + backup)
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = os.path.join(PROTOCOL_DIR, f"run_{run_id}") if mode in ("full", "medium") else None
-    if run_dir:
-        os.makedirs(run_dir, exist_ok=True)
+    if resume_run_id:
+        run_id = resume_run_id
+        run_dir = os.path.join(PROTOCOL_DIR, f"run_{run_id}")
+        if not os.path.isdir(run_dir):
+            raise FileNotFoundError(f"Resume run dir not found: {run_dir}")
         run_results_csv = os.path.join(run_dir, "results.csv")
         run_config_json = os.path.join(run_dir, "config.json")
         run_runtime_txt = os.path.join(run_dir, "runtime.txt")
-        # Backup main results before run
-        if os.path.exists(RESULTS_CSV):
-            backup_path = os.path.join(PROTOCOL_DIR, f"results_backup_{run_id}.csv")
-            shutil.copy2(RESULTS_CSV, backup_path)
-            print(f"Backed up existing results -> {backup_path}")
+        print(
+            f"[RESUME] run_id={run_id}, start_fold={resume_start_fold}, "
+            f"start_method={resume_start_method}, appending -> {run_results_csv}"
+        )
     else:
-        run_results_csv = RESULTS_CSV
-        run_config_json = CONFIG_JSON
-        run_runtime_txt = RUNTIME_ESTIMATE_TXT
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_dir = os.path.join(PROTOCOL_DIR, f"run_{run_id}") if mode in ("full", "medium") else None
+        if run_dir:
+            os.makedirs(run_dir, exist_ok=True)
+            run_results_csv = os.path.join(run_dir, "results.csv")
+            run_config_json = os.path.join(run_dir, "config.json")
+            run_runtime_txt = os.path.join(run_dir, "runtime.txt")
+            # Backup main results before run
+            if os.path.exists(RESULTS_CSV):
+                backup_path = os.path.join(PROTOCOL_DIR, f"results_backup_{run_id}.csv")
+                shutil.copy2(RESULTS_CSV, backup_path)
+                print(f"Backed up existing results -> {backup_path}")
+        else:
+            run_results_csv = RESULTS_CSV
+            run_config_json = CONFIG_JSON
+            run_runtime_txt = RUNTIME_ESTIMATE_TXT
 
     est = _estimate_runtime(n_folds, len(target_pos_rates), ctgan_per_run, tabddpm_per_run)
     print(f"\n[RUNTIME ESTIMATE] {est} (mode={mode})\n")
@@ -212,38 +256,40 @@ def main():
         if run_dir:
             f.write(f"Results: {run_results_csv}\nConfig: {run_config_json}\n")
 
-    # Save config for reproducibility
+    # Save config for reproducibility (skip overwrite on resume)
     recency_ablation = getattr(args, "recency_ablation", False)
-    config = {
-        "run_id": run_id,
-        "mode": mode,
-        "recency_ablation": recency_ablation,
-        "delay_days": delay_days,
-        "command": " ".join(sys.argv),
-        "start_time": _now_str(),
-        "target_col": TARGET_COL,
-        "time_col": TIME_COL,
-        "categorical_cols": CATEGORICAL_COLS,
-        "n_folds": n_folds,
-        "target_pos_rates": target_pos_rates,
-        "max_synth_pos": max_synth,
-        "runtime_estimate": est,
-        "ctgan": {
-            "epochs": ctgan_epochs,
-            "batch_size": CTGAN_BATCH_SIZE,
-            "pac": CTGAN_PAC,
-            "seed": CTGAN_SEED,
-        },
-        "tabddpm": {
-            "seed": TABDDPM_SEED,
-            **tabddpm_kwargs,
-        },
-        "results_csv": run_results_csv,
-        "results_dir": run_dir or PROTOCOL_DIR,
-    }
-    with open(run_config_json, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
-    print(f"Saved config -> {run_config_json}")
+    if not resume_run_id:
+        config = {
+            "run_id": run_id,
+            "mode": mode,
+            "recency_ablation": recency_ablation,
+            "delay_days": delay_days,
+            "command": " ".join(sys.argv),
+            "start_time": _now_str(),
+            "target_col": TARGET_COL,
+            "time_col": TIME_COL,
+            "categorical_cols": CATEGORICAL_COLS,
+            "n_folds": n_folds,
+            "target_pos_rates": target_pos_rates,
+            "max_synth_pos": max_synth,
+            "runtime_estimate": est,
+            "ctgan": {
+                "epochs": ctgan_epochs,
+                "batch_size": CTGAN_BATCH_SIZE,
+                "discriminator_steps": CTGAN_DISCRIMINATOR_STEPS,
+                "pac": CTGAN_PAC,
+                "seed": CTGAN_SEED,
+            },
+            "tabddpm": {
+                "seed": TABDDPM_SEED,
+                **tabddpm_kwargs,
+            },
+            "results_csv": run_results_csv,
+            "results_dir": run_dir or PROTOCOL_DIR,
+        }
+        with open(run_config_json, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+        print(f"Saved config -> {run_config_json}")
 
     # Load (same logic as run_smote_baseline for consistency)
     data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
@@ -266,11 +312,15 @@ def main():
     print(f"Running {n_folds} temporal folds (using {n_folds + 1} time chunks)")
 
     t_start = time.perf_counter()
+    fidelity_records: List[Dict[str, Any]] = []
 
     for fold_info in folds_raw:
         fold = fold_info["fold"]
         train_df = fold_info["train_df"]
         val_df = fold_info["val_df"]
+
+        if fold < resume_start_fold:
+            continue
 
         _print_fold_header(fold)
 
@@ -303,83 +353,49 @@ def main():
         print(f"[INFO] Fold {fold}: preprocessed -> {len(used_cols)} features, train={len(train_df)}, val={len(val_df)}")
         cat_cols = get_cat_cols_for_synth(train_df, used_cols)
 
+        run_baseline = not (fold == resume_start_fold and resume_start_method != "baseline")
+        run_ctgan = (fold > resume_start_fold) or (fold == resume_start_fold and resume_start_method in ("baseline", "ctgan"))
+        run_tabddpm = (fold > resume_start_fold) or (fold == resume_start_fold and resume_start_method in ("baseline", "ctgan", "tabddpm"))
+        run_smote = (fold > resume_start_fold) or (fold == resume_start_fold and resume_start_method in ("baseline", "ctgan", "tabddpm", "smote"))
+
         # ----------------------------
         # BASELINE
         # ----------------------------
-        base = train_and_eval(train_df, val_df)
+        if run_baseline:
+            base = train_and_eval(train_df, val_df)
 
-        pr_auc = _get_metric(base, ["pr_auc", "prauc", "prAUC"])
-        recall = _get_metric(base, ["recall_at_1pct_fpr", "recall@1%fpr", "recall_at_1fpr", "recall_at_1_fpr"])
+            pr_auc = _get_metric(base, ["pr_auc", "prauc", "prAUC"])
+            recall = _get_metric(base, ["recall_at_1pct_fpr", "recall@1%fpr", "recall_at_1fpr", "recall_at_1_fpr"])
 
-        print(f"BASELINE PR-AUC: {pr_auc:.4f}, Recall@1%FPR: {recall:.4f}")
-
-        _append_row_csv({
-            "timestamp": _now_str(),
-            "fold": fold,
-            "delay_days": delay_days,
-            "run_id": run_id,
-            "method": "baseline",
-            "target_pos_rate": "",
-            "train_rows": len(train_df),
-            "val_rows": len(val_df),
-            "train_pos": int((train_df[TARGET_COL] == 1).sum()),
-            "train_neg": int((train_df[TARGET_COL] == 0).sum()),
-            "synth_rows": 0,
-            "final_train_rows": len(train_df),
-            "final_pos_rate": float((train_df[TARGET_COL] == 1).mean()),
-            "pr_auc": pr_auc,
-            "recall_at_1pct_fpr": recall,
-            "notes": "",
-        }, run_results_csv)
-
-        # ----------------------------
-        # CTGAN TARGET RATES
-        # ----------------------------
-        for target_rate in target_pos_rates:
-            print("\n" + "-" * 50)
-            print(f"[CTGAN] target_pos_rate={target_rate}")
-
-            synth_pos = make_synthetic_positives(
-                train_df=train_df,
-                cat_cols=cat_cols,
-                used_cols=used_cols,
-                target_pos_rate=target_rate,
-                max_synth=max_synth,
-                epochs=ctgan_epochs,
-                batch_size=CTGAN_BATCH_SIZE,
-                pac=CTGAN_PAC,
-                seed=CTGAN_SEED,
-                verbose=True,
-            )
-
-            mixed_train = pd.concat([train_df, synth_pos], axis=0, ignore_index=True)
-            res = train_and_eval(mixed_train, val_df)
-            pr_auc_m = _get_metric(res, ["pr_auc", "prauc", "prAUC"])
-            recall_m = _get_metric(res, ["recall_at_1pct_fpr", "recall@1%fpr", "recall_at_1fpr", "recall_at_1_fpr"])
-            print(f"CTGAN+REAL PR-AUC: {pr_auc_m:.4f}, Recall@1%FPR: {recall_m:.4f}")
+            print(f"BASELINE PR-AUC: {pr_auc:.4f}, Recall@1%FPR: {recall:.4f}")
 
             _append_row_csv({
                 "timestamp": _now_str(),
                 "fold": fold,
                 "delay_days": delay_days,
                 "run_id": run_id,
-                "method": "ctgan",
-                "target_pos_rate": float(target_rate),
+                "method": "baseline",
+                "target_pos_rate": "",
                 "train_rows": len(train_df),
                 "val_rows": len(val_df),
                 "train_pos": int((train_df[TARGET_COL] == 1).sum()),
                 "train_neg": int((train_df[TARGET_COL] == 0).sum()),
-                "synth_rows": int(len(synth_pos)),
-                "final_train_rows": int(len(mixed_train)),
-                "final_pos_rate": float((mixed_train[TARGET_COL] == 1).mean()),
-                "pr_auc": pr_auc_m,
-                "recall_at_1pct_fpr": recall_m,
+                "synth_rows": 0,
+                "final_train_rows": len(train_df),
+                "final_pos_rate": float((train_df[TARGET_COL] == 1).mean()),
+                "pr_auc": pr_auc,
+                "recall_at_1pct_fpr": recall,
                 "notes": "",
             }, run_results_csv)
 
-            if recency_ablation:
+        # ----------------------------
+        # CTGAN TARGET RATES
+        # ----------------------------
+        if run_ctgan:
+            for target_rate in target_pos_rates:
                 print("\n" + "-" * 50)
-                print(f"[CTGAN recency=0.3] target_pos_rate={target_rate}")
+                print(f"[CTGAN] target_pos_rate={target_rate}")
+    
                 synth_pos = make_synthetic_positives(
                     train_df=train_df,
                     cat_cols=cat_cols,
@@ -390,21 +406,56 @@ def main():
                     batch_size=CTGAN_BATCH_SIZE,
                     pac=CTGAN_PAC,
                     seed=CTGAN_SEED,
+                    discriminator_steps=CTGAN_DISCRIMINATOR_STEPS,
                     verbose=True,
-                    recency_frac=0.3,
-                    time_col=TIME_COL,
                 )
+    
+                if len(synth_pos) > 0:
+                    real_fraud = train_df[train_df[TARGET_COL] == 1]
+                    real_legit = train_df[train_df[TARGET_COL] == 0]
+                    fsum = fidelity_summary(
+                        synthetic_fraud=synth_pos,
+                        real_fraud=real_fraud,
+                        real_legit=real_legit,
+                        method="ctgan",
+                        fold=fold,
+                    )
+                    synth_pos_filtered = filter_by_dcr(
+                        synth_pos,
+                        real_fraud,
+                        percentile=90,
+                    )
+                    n_after = int(len(synth_pos_filtered))
+                    n_before = int(len(synth_pos))
+                    print(
+                        f"[FIDELITY][ctgan][fold={fold}] "
+                        f"survived={n_after}, discarded={n_before - n_after}"
+                    )
+                    fidelity_records.append(
+                        {
+                            "method": "ctgan",
+                            "fold": int(fold),
+                            "mean_dcr": fsum.get("dcr_mean"),
+                            "median_dcr": fsum.get("dcr_median"),
+                            "mean_nndr": fsum.get("nndr_mean"),
+                            "median_nndr": fsum.get("nndr_median"),
+                            "n_synthetic": n_before,
+                            "n_after_filter": n_after,
+                        }
+                    )
+    
                 mixed_train = pd.concat([train_df, synth_pos], axis=0, ignore_index=True)
                 res = train_and_eval(mixed_train, val_df)
                 pr_auc_m = _get_metric(res, ["pr_auc", "prauc", "prAUC"])
                 recall_m = _get_metric(res, ["recall_at_1pct_fpr", "recall@1%fpr", "recall_at_1fpr", "recall_at_1_fpr"])
-                print(f"CTGAN_recency03 PR-AUC: {pr_auc_m:.4f}, Recall@1%FPR: {recall_m:.4f}")
+                print(f"CTGAN+REAL PR-AUC: {pr_auc_m:.4f}, Recall@1%FPR: {recall_m:.4f}")
+    
                 _append_row_csv({
                     "timestamp": _now_str(),
                     "fold": fold,
                     "delay_days": delay_days,
                     "run_id": run_id,
-                    "method": "ctgan_recency03",
+                    "method": "ctgan",
                     "target_pos_rate": float(target_rate),
                     "train_rows": len(train_df),
                     "val_rows": len(val_df),
@@ -415,57 +466,92 @@ def main():
                     "final_pos_rate": float((mixed_train[TARGET_COL] == 1).mean()),
                     "pr_auc": pr_auc_m,
                     "recall_at_1pct_fpr": recall_m,
-                    "notes": "recency_frac=0.3",
+                    "notes": "",
                 }, run_results_csv)
+    
+                if recency_ablation:
+                    print("\n" + "-" * 50)
+                    print(f"[CTGAN recency=0.3] target_pos_rate={target_rate}")
+                    synth_pos = make_synthetic_positives(
+                        train_df=train_df,
+                        cat_cols=cat_cols,
+                        used_cols=used_cols,
+                        target_pos_rate=target_rate,
+                        max_synth=max_synth,
+                        epochs=ctgan_epochs,
+                        batch_size=CTGAN_BATCH_SIZE,
+                        pac=CTGAN_PAC,
+                        seed=CTGAN_SEED,
+                        discriminator_steps=CTGAN_DISCRIMINATOR_STEPS,
+                        verbose=True,
+                        recency_frac=0.3,
+                        time_col=TIME_COL,
+                    )
+                    if len(synth_pos) > 0:
+                        real_fraud = train_df[train_df[TARGET_COL] == 1]
+                        real_legit = train_df[train_df[TARGET_COL] == 0]
+                        fsum = fidelity_summary(
+                            synthetic_fraud=synth_pos,
+                            real_fraud=real_fraud,
+                            real_legit=real_legit,
+                            method="ctgan_recency03",
+                            fold=fold,
+                        )
+                        synth_pos_filtered = filter_by_dcr(
+                            synth_pos,
+                            real_fraud,
+                            percentile=90,
+                        )
+                        n_after = int(len(synth_pos_filtered))
+                        n_before = int(len(synth_pos))
+                        print(
+                            f"[FIDELITY][ctgan_recency03][fold={fold}] "
+                            f"survived={n_after}, discarded={n_before - n_after}"
+                        )
+                        fidelity_records.append(
+                            {
+                                "method": "ctgan_recency03",
+                                "fold": int(fold),
+                                "mean_dcr": fsum.get("dcr_mean"),
+                                "median_dcr": fsum.get("dcr_median"),
+                                "mean_nndr": fsum.get("nndr_mean"),
+                                "median_nndr": fsum.get("nndr_median"),
+                                "n_synthetic": n_before,
+                                "n_after_filter": n_after,
+                            }
+                        )
+                    mixed_train = pd.concat([train_df, synth_pos], axis=0, ignore_index=True)
+                    res = train_and_eval(mixed_train, val_df)
+                    pr_auc_m = _get_metric(res, ["pr_auc", "prauc", "prAUC"])
+                    recall_m = _get_metric(res, ["recall_at_1pct_fpr", "recall@1%fpr", "recall_at_1fpr", "recall_at_1_fpr"])
+                    print(f"CTGAN_recency03 PR-AUC: {pr_auc_m:.4f}, Recall@1%FPR: {recall_m:.4f}")
+                    _append_row_csv({
+                        "timestamp": _now_str(),
+                        "fold": fold,
+                        "delay_days": delay_days,
+                        "run_id": run_id,
+                        "method": "ctgan_recency03",
+                        "target_pos_rate": float(target_rate),
+                        "train_rows": len(train_df),
+                        "val_rows": len(val_df),
+                        "train_pos": int((train_df[TARGET_COL] == 1).sum()),
+                        "train_neg": int((train_df[TARGET_COL] == 0).sum()),
+                        "synth_rows": int(len(synth_pos)),
+                        "final_train_rows": int(len(mixed_train)),
+                        "final_pos_rate": float((mixed_train[TARGET_COL] == 1).mean()),
+                        "pr_auc": pr_auc_m,
+                        "recall_at_1pct_fpr": recall_m,
+                        "notes": "recency_frac=0.3",
+                    }, run_results_csv)
 
         # ----------------------------
         # TabDDPM TARGET RATES
         # ----------------------------
-        for target_rate in target_pos_rates:
-            print("\n" + "-" * 50)
-            print(f"[TabDDPM] target_pos_rate={target_rate}")
-
-            synth_pos = make_synthetic_positives_tabddpm(
-                train_df=train_df,
-                cat_cols=cat_cols,
-                used_cols=used_cols,
-                target_pos_rate=target_rate,
-                max_synth=max_synth,
-                seed=TABDDPM_SEED,
-                verbose=True,
-                **tabddpm_kwargs,
-            )
-
-            mixed_train = pd.concat([train_df, synth_pos], axis=0, ignore_index=True)
-
-            res = train_and_eval(mixed_train, val_df)
-            pr_auc_m = _get_metric(res, ["pr_auc", "prauc", "prAUC"])
-            recall_m = _get_metric(res, ["recall_at_1pct_fpr", "recall@1%fpr", "recall_at_1fpr", "recall_at_1_fpr"])
-
-            print(f"TabDDPM+REAL PR-AUC: {pr_auc_m:.4f}, Recall@1%FPR: {recall_m:.4f}")
-
-            _append_row_csv({
-                "timestamp": _now_str(),
-                "fold": fold,
-                "delay_days": delay_days,
-                "run_id": run_id,
-                "method": "tabddpm",
-                "target_pos_rate": float(target_rate),
-                "train_rows": len(train_df),
-                "val_rows": len(val_df),
-                "train_pos": int((train_df[TARGET_COL] == 1).sum()),
-                "train_neg": int((train_df[TARGET_COL] == 0).sum()),
-                "synth_rows": int(len(synth_pos)),
-                "final_train_rows": int(len(mixed_train)),
-                "final_pos_rate": float((mixed_train[TARGET_COL] == 1).mean()),
-                "pr_auc": pr_auc_m,
-                "recall_at_1pct_fpr": recall_m,
-                "notes": "",
-            }, run_results_csv)
-
-            if recency_ablation:
+        if run_tabddpm:
+            for target_rate in target_pos_rates:
                 print("\n" + "-" * 50)
-                print(f"[TabDDPM recency=0.3] target_pos_rate={target_rate}")
+                print(f"[TabDDPM] target_pos_rate={target_rate}")
+    
                 synth_pos = make_synthetic_positives_tabddpm(
                     train_df=train_df,
                     cat_cols=cat_cols,
@@ -474,21 +560,57 @@ def main():
                     max_synth=max_synth,
                     seed=TABDDPM_SEED,
                     verbose=True,
-                    recency_frac=0.3,
-                    time_col=TIME_COL,
                     **tabddpm_kwargs,
                 )
+    
+                if len(synth_pos) > 0:
+                    real_fraud = train_df[train_df[TARGET_COL] == 1]
+                    real_legit = train_df[train_df[TARGET_COL] == 0]
+                    fsum = fidelity_summary(
+                        synthetic_fraud=synth_pos,
+                        real_fraud=real_fraud,
+                        real_legit=real_legit,
+                        method="tabddpm",
+                        fold=fold,
+                    )
+                    synth_pos_filtered = filter_by_dcr(
+                        synth_pos,
+                        real_fraud,
+                        percentile=90,
+                    )
+                    n_after = int(len(synth_pos_filtered))
+                    n_before = int(len(synth_pos))
+                    print(
+                        f"[FIDELITY][tabddpm][fold={fold}] "
+                        f"survived={n_after}, discarded={n_before - n_after}"
+                    )
+                    fidelity_records.append(
+                        {
+                            "method": "tabddpm",
+                            "fold": int(fold),
+                            "mean_dcr": fsum.get("dcr_mean"),
+                            "median_dcr": fsum.get("dcr_median"),
+                            "mean_nndr": fsum.get("nndr_mean"),
+                            "median_nndr": fsum.get("nndr_median"),
+                            "n_synthetic": n_before,
+                            "n_after_filter": n_after,
+                        }
+                    )
+    
                 mixed_train = pd.concat([train_df, synth_pos], axis=0, ignore_index=True)
+    
                 res = train_and_eval(mixed_train, val_df)
                 pr_auc_m = _get_metric(res, ["pr_auc", "prauc", "prAUC"])
                 recall_m = _get_metric(res, ["recall_at_1pct_fpr", "recall@1%fpr", "recall_at_1fpr", "recall_at_1_fpr"])
-                print(f"TabDDPM_recency03 PR-AUC: {pr_auc_m:.4f}, Recall@1%FPR: {recall_m:.4f}")
+    
+                print(f"TabDDPM+REAL PR-AUC: {pr_auc_m:.4f}, Recall@1%FPR: {recall_m:.4f}")
+    
                 _append_row_csv({
                     "timestamp": _now_str(),
                     "fold": fold,
                     "delay_days": delay_days,
                     "run_id": run_id,
-                    "method": "tabddpm_recency03",
+                    "method": "tabddpm",
                     "target_pos_rate": float(target_rate),
                     "train_rows": len(train_df),
                     "val_rows": len(val_df),
@@ -499,83 +621,160 @@ def main():
                     "final_pos_rate": float((mixed_train[TARGET_COL] == 1).mean()),
                     "pr_auc": pr_auc_m,
                     "recall_at_1pct_fpr": recall_m,
-                    "notes": "recency_frac=0.3",
+                    "notes": "",
                 }, run_results_csv)
+    
+                if recency_ablation:
+                    print("\n" + "-" * 50)
+                    print(f"[TabDDPM recency=0.3] target_pos_rate={target_rate}")
+                    synth_pos = make_synthetic_positives_tabddpm(
+                        train_df=train_df,
+                        cat_cols=cat_cols,
+                        used_cols=used_cols,
+                        target_pos_rate=target_rate,
+                        max_synth=max_synth,
+                        seed=TABDDPM_SEED,
+                        verbose=True,
+                        recency_frac=0.3,
+                        time_col=TIME_COL,
+                        **tabddpm_kwargs,
+                    )
+                    if len(synth_pos) > 0:
+                        real_fraud = train_df[train_df[TARGET_COL] == 1]
+                        real_legit = train_df[train_df[TARGET_COL] == 0]
+                        fsum = fidelity_summary(
+                            synthetic_fraud=synth_pos,
+                            real_fraud=real_fraud,
+                            real_legit=real_legit,
+                            method="tabddpm_recency03",
+                            fold=fold,
+                        )
+                        synth_pos_filtered = filter_by_dcr(
+                            synth_pos,
+                            real_fraud,
+                            percentile=90,
+                        )
+                        n_after = int(len(synth_pos_filtered))
+                        n_before = int(len(synth_pos))
+                        print(
+                            f"[FIDELITY][tabddpm_recency03][fold={fold}] "
+                            f"survived={n_after}, discarded={n_before - n_after}"
+                        )
+                        fidelity_records.append(
+                            {
+                                "method": "tabddpm_recency03",
+                                "fold": int(fold),
+                                "mean_dcr": fsum.get("dcr_mean"),
+                                "median_dcr": fsum.get("dcr_median"),
+                                "mean_nndr": fsum.get("nndr_mean"),
+                                "median_nndr": fsum.get("nndr_median"),
+                                "n_synthetic": n_before,
+                                "n_after_filter": n_after,
+                            }
+                        )
+                    mixed_train = pd.concat([train_df, synth_pos], axis=0, ignore_index=True)
+                    res = train_and_eval(mixed_train, val_df)
+                    pr_auc_m = _get_metric(res, ["pr_auc", "prauc", "prAUC"])
+                    recall_m = _get_metric(res, ["recall_at_1pct_fpr", "recall@1%fpr", "recall_at_1fpr", "recall_at_1_fpr"])
+                    print(f"TabDDPM_recency03 PR-AUC: {pr_auc_m:.4f}, Recall@1%FPR: {recall_m:.4f}")
+                    _append_row_csv({
+                        "timestamp": _now_str(),
+                        "fold": fold,
+                        "delay_days": delay_days,
+                        "run_id": run_id,
+                        "method": "tabddpm_recency03",
+                        "target_pos_rate": float(target_rate),
+                        "train_rows": len(train_df),
+                        "val_rows": len(val_df),
+                        "train_pos": int((train_df[TARGET_COL] == 1).sum()),
+                        "train_neg": int((train_df[TARGET_COL] == 0).sum()),
+                        "synth_rows": int(len(synth_pos)),
+                        "final_train_rows": int(len(mixed_train)),
+                        "final_pos_rate": float((mixed_train[TARGET_COL] == 1).mean()),
+                        "pr_auc": pr_auc_m,
+                        "recall_at_1pct_fpr": recall_m,
+                        "notes": "recency_frac=0.3",
+                    }, run_results_csv)
 
         # ----------------------------
         # SMOTE (same feature space as baseline/CTGAN/TabDDPM)
         # ----------------------------
-        for target_rate in target_pos_rates:
-            print("\n" + "-" * 50)
-            print(f"[SMOTE] target_pos_rate={target_rate}")
-
-            res = train_and_eval_smote(
-                train_df=train_df,
-                val_df=val_df,
-                target_pos_rate=target_rate,
-                k_neighbors=5,
-                max_synth=max_synth,
-            )
-            pr_auc_m = _get_metric(res, ["pr_auc", "prauc", "prAUC"])
-            recall_m = _get_metric(res, ["recall_at_1pct_fpr", "recall@1%fpr", "recall_at_1fpr", "recall_at_1_fpr"])
-
-            print(f"SMOTE PR-AUC: {pr_auc_m:.4f}, Recall@1%FPR: {recall_m:.4f}")
-
-            _append_row_csv({
-                "timestamp": _now_str(),
-                "fold": fold,
-                "delay_days": delay_days,
-                "run_id": run_id,
-                "method": "smote",
-                "target_pos_rate": float(target_rate),
-                "train_rows": len(train_df),
-                "val_rows": len(val_df),
-                "train_pos": int((train_df[TARGET_COL] == 1).sum()),
-                "train_neg": int((train_df[TARGET_COL] == 0).sum()),
-                "synth_rows": 0,  # SMOTE doesn't report count; train_and_eval_smote doesn't return it
-                "final_train_rows": len(train_df),
-                "final_pos_rate": target_rate,
-                "pr_auc": pr_auc_m,
-                "recall_at_1pct_fpr": recall_m,
-                "notes": "",
-            }, run_results_csv)
-
-            if recency_ablation:
+        if run_smote:
+            for target_rate in target_pos_rates:
                 print("\n" + "-" * 50)
-                print(f"[SMOTE recency=0.3] target_pos_rate={target_rate}")
+                print(f"[SMOTE] target_pos_rate={target_rate}")
+    
                 res = train_and_eval_smote(
                     train_df=train_df,
                     val_df=val_df,
                     target_pos_rate=target_rate,
                     k_neighbors=5,
                     max_synth=max_synth,
-                    recency_frac=0.3,
-                    time_col=TIME_COL,
                 )
                 pr_auc_m = _get_metric(res, ["pr_auc", "prauc", "prAUC"])
                 recall_m = _get_metric(res, ["recall_at_1pct_fpr", "recall@1%fpr", "recall_at_1fpr", "recall_at_1_fpr"])
-                print(f"SMOTE_recency03 PR-AUC: {pr_auc_m:.4f}, Recall@1%FPR: {recall_m:.4f}")
+    
+                print(f"SMOTE PR-AUC: {pr_auc_m:.4f}, Recall@1%FPR: {recall_m:.4f}")
+    
                 _append_row_csv({
                     "timestamp": _now_str(),
                     "fold": fold,
                     "delay_days": delay_days,
                     "run_id": run_id,
-                    "method": "smote_recency03",
+                    "method": "smote",
                     "target_pos_rate": float(target_rate),
                     "train_rows": len(train_df),
                     "val_rows": len(val_df),
                     "train_pos": int((train_df[TARGET_COL] == 1).sum()),
                     "train_neg": int((train_df[TARGET_COL] == 0).sum()),
-                    "synth_rows": 0,
+                    "synth_rows": 0,  # SMOTE doesn't report count; train_and_eval_smote doesn't return it
                     "final_train_rows": len(train_df),
                     "final_pos_rate": target_rate,
                     "pr_auc": pr_auc_m,
                     "recall_at_1pct_fpr": recall_m,
-                    "notes": "recency_frac=0.3",
+                    "notes": "",
                 }, run_results_csv)
+    
+                if recency_ablation:
+                    print("\n" + "-" * 50)
+                    print(f"[SMOTE recency=0.3] target_pos_rate={target_rate}")
+                    res = train_and_eval_smote(
+                        train_df=train_df,
+                        val_df=val_df,
+                        target_pos_rate=target_rate,
+                        k_neighbors=5,
+                        max_synth=max_synth,
+                        recency_frac=0.3,
+                        time_col=TIME_COL,
+                    )
+                    pr_auc_m = _get_metric(res, ["pr_auc", "prauc", "prAUC"])
+                    recall_m = _get_metric(res, ["recall_at_1pct_fpr", "recall@1%fpr", "recall_at_1fpr", "recall_at_1_fpr"])
+                    print(f"SMOTE_recency03 PR-AUC: {pr_auc_m:.4f}, Recall@1%FPR: {recall_m:.4f}")
+                    _append_row_csv({
+                        "timestamp": _now_str(),
+                        "fold": fold,
+                        "delay_days": delay_days,
+                        "run_id": run_id,
+                        "method": "smote_recency03",
+                        "target_pos_rate": float(target_rate),
+                        "train_rows": len(train_df),
+                        "val_rows": len(val_df),
+                        "train_pos": int((train_df[TARGET_COL] == 1).sum()),
+                        "train_neg": int((train_df[TARGET_COL] == 0).sum()),
+                        "synth_rows": 0,
+                        "final_train_rows": len(train_df),
+                        "final_pos_rate": target_rate,
+                        "pr_auc": pr_auc_m,
+                        "recall_at_1pct_fpr": recall_m,
+                        "notes": "recency_frac=0.3",
+                    }, run_results_csv)
 
     t_elapsed = time.perf_counter() - t_start
     elapsed_str = f"{int(t_elapsed // 60)}m {int(t_elapsed % 60)}s"
+    if fidelity_records:
+        fidelity_df = pd.DataFrame(fidelity_records)
+        fidelity_df.to_csv(FIDELITY_RESULTS_CSV, index=False)
+        print(f"[FIDELITY] wrote -> {FIDELITY_RESULTS_CSV} ({len(fidelity_df)} rows)")
     print(f"\n[DONE] Total elapsed: {elapsed_str}")
     with open(run_runtime_txt, "a") as f:
         f.write(f"Actual elapsed: {elapsed_str}\n")

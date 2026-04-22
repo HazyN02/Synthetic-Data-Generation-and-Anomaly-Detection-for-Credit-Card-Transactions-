@@ -195,7 +195,7 @@ Run SMOTE **inside the protocol** on the same `preprocess_for_synth` output. All
 
 - [ ] **Target rate ablation table** — Method × rate × fold.
 - [ ] **Recency ablation** — Fold 3, recency_frac=0.3 for CTGAN.
-- [ ] **Fill 04_ANALYSIS.md** — Real numbers from protocol.
+- [ ] **Fill 05_ANALYSIS.md** — Real numbers from protocol.
 - [ ] **Generate figures** — `python -m src.paper_figures`.
 
 ### Nice to Have

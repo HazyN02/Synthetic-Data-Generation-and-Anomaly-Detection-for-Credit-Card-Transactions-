@@ -1,0 +1,7 @@
+# 7. Conclusion
+
+We study when synthetic oversampling improves or degrades rare-event fraud detection under **leakage-safe temporal** evaluation on the **IEEE-CIS** benchmark. Across four temporal folds, deep generative oversampling (**CTGAN**, **TabDDPM**) yields **moderate average gains** over the baseline but does **not** show statistically significant improvements under our paired tests (n=4). **SMOTE** remains a **competitive** and simple alternative, and **recency-aware** synthesis shows **limited or mixed** benefit: CTGAN/TabDDPM recency helps within our protocol, while **SMOTE-recency** is neutral overall but harms in some folds.
+
+To explain these patterns, we relate oversampling impact to **train–validation drift** using a **domain-classifier** signal: generator performance is more consistent with drift-dependent effects (exploratory with four folds). Finally, under a **label-delay** protocol, oversampling does not recover the performance lost when recent labeled training data are withheld.
+
+Overall, our results suggest that practitioners should treat synthetic oversampling—especially deep tabular generators—as an **evidence-driven option** rather than a default remedy for imbalance. We recommend that fraud-detection studies report performance under **time-respecting protocols** and label-delay regimes before claiming benefits from sophisticated synthetic-data generators.

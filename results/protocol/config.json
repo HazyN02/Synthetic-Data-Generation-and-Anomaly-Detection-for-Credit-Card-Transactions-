@@ -1,10 +1,10 @@
 {
-  "run_id": "20260304_115441",
-  "mode": "max",
-  "recency_ablation": true,
+  "run_id": "20260329_145500",
+  "mode": "quick",
+  "recency_ablation": false,
   "delay_days": 0,
-  "command": "/Users/yasasvikaipa/Downloads/fraud-synth-icml/src/run_protocol.py --max-convergence --recency-ablation",
-  "start_time": "04-03-2026 11:54",
+  "command": "/Users/yasasvikaipa/Downloads/fraud-synth-icml/src/run_protocol.py --quick",
+  "start_time": "29-03-2026 14:55",
   "target_col": "isFraud",
   "time_col": "TransactionDT",
   "categorical_cols": [
@@ -36,25 +36,25 @@
     "id_37",
     "id_38"
   ],
-  "n_folds": 4,
+  "n_folds": 2,
   "target_pos_rates": [
-    0.1
+    0.05
   ],
-  "max_synth_pos": 50000,
-  "runtime_estimate": "~308 min (5h 8m)",
+  "max_synth_pos": 5000,
+  "runtime_estimate": "~50 min (0h 50m)",
   "ctgan": {
-    "epochs": 50,
+    "epochs": 5,
     "batch_size": 512,
     "pac": 1,
     "seed": 0
   },
   "tabddpm": {
     "seed": 0,
-    "timesteps": 75,
-    "epochs": 50,
+    "timesteps": 50,
+    "epochs": 3,
     "hidden_dims": [
-      768,
-      768
+      512,
+      512
     ]
   },
   "results_csv": "results/protocol/results.csv",

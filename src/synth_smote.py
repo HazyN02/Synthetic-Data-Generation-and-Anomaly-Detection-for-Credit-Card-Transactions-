@@ -107,6 +107,84 @@ def _apply_recency_smote(
     return pd.concat([pos_recent, neg_df], ignore_index=True)
 
 
+def build_smote_expanded_fraud_df(
+    train_df: pd.DataFrame,
+    val_df: pd.DataFrame,
+    smote_train_pos_rate: float = 0.10,
+    k_neighbors: int = 5,
+    random_state: int = 42,
+    max_synth: int | None = None,
+) -> pd.DataFrame:
+    """
+    Apply SMOTE on the full training set to reach smote_train_pos_rate, then return only
+    the positive (fraud) rows as a DataFrame in the same column space as train_df.
+
+    Synthetic rows are built by taking the nearest real fraud neighbor in encoded space
+    and copying categorical fields; numeric fields use SMOTE-interpolated values.
+    """
+    train_df = train_df.reset_index(drop=True)
+    feature_cols = [c for c in train_df.columns if c != TARGET_COL]
+    shared = [c for c in feature_cols if c in val_df.columns]
+    if not shared:
+        pos = train_df[train_df[TARGET_COL] == 1].copy()
+        return pos
+
+    tr = train_df[shared + [TARGET_COL]].copy()
+    va = val_df[shared + [TARGET_COL]].copy()
+
+    obj_cols = [c for c in shared if tr[c].dtype == "object" or tr[c].dtype.name == "category"]
+    num_cols = [c for c in shared if c not in obj_cols]
+
+    X_train_encoded = tr[shared].copy()
+    if obj_cols:
+        from sklearn.preprocessing import OrdinalEncoder
+
+        enc = OrdinalEncoder(
+            handle_unknown="use_encoded_value",
+            unknown_value=-1,
+        )
+        tr_cat = tr[obj_cols].astype(str).fillna("__MISSING__")
+        X_train_encoded[obj_cols] = enc.fit_transform(tr_cat)
+    for c in num_cols:
+        X_train_encoded[c] = pd.to_numeric(X_train_encoded[c], errors="coerce").fillna(-1)
+
+    X_train = X_train_encoded[shared].fillna(-1).astype(np.float32).values
+    y_train = tr[TARGET_COL].values
+
+    n_pos = int((y_train == 1).sum())
+    if n_pos < 2:
+        return train_df[train_df[TARGET_COL] == 1].copy()
+
+    X_res, y_res = _smote_oversample(
+        X_train,
+        y_train,
+        target_pos_rate=smote_train_pos_rate,
+        k_neighbors=k_neighbors,
+        random_state=random_state,
+        max_synth=max_synth,
+    )
+
+    pos_mask_tr = y_train == 1
+    X_pos = X_train[pos_mask_tr]
+    pos_row_idx = np.where(pos_mask_tr)[0]
+
+    col_to_i = {c: i for i, c in enumerate(shared)}
+    rows: list[pd.Series] = []
+    for j in range(len(X_res)):
+        if y_res[j] != 1:
+            continue
+        x = X_res[j]
+        dists = np.linalg.norm(X_pos - x, axis=1)
+        nn_local = int(np.argmin(dists))
+        base_i = int(pos_row_idx[nn_local])
+        row = train_df.iloc[base_i].copy()
+        for c in num_cols:
+            row[c] = float(x[col_to_i[c]])
+        rows.append(row)
+
+    return pd.DataFrame(rows).reset_index(drop=True)
+
+
 def train_and_eval_smote(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,

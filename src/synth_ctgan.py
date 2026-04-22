@@ -78,6 +78,7 @@ def fit_ctgan(
     pac: int = 1,
     seed: int = 0,
     verbose: bool = True,
+    discriminator_steps: int = 1,
 ) -> Tuple[CTGAN, CTGANArtifacts]:
     """
     Fits CTGAN (ctgan package) on a prepared dataframe.
@@ -89,9 +90,14 @@ def fit_ctgan(
 
     proc, artifacts = _prep_for_ctgan(train_df, used_cols=used_cols, cat_cols=cat_cols, seed=seed)
 
-    # Reduce batch_size when many cols to avoid OOM / stalls
+    # Reduce batch_size when many cols to avoid OOM / stalls (allow up to requested batch_size, e.g. 500)
     n_cols = proc.shape[1]
-    bs = min(batch_size, 128 if n_cols > 200 else 256 if n_cols > 150 else batch_size)
+    if n_cols > 200:
+        bs = min(batch_size, 128)
+    elif n_cols > 150:
+        bs = min(batch_size, 500)
+    else:
+        bs = batch_size
 
     if verbose:
         print(f"[CTGAN] Training rows: {len(proc)} | cols: {n_cols} | pac={pac} | batch_size={bs}")
@@ -101,6 +107,7 @@ def fit_ctgan(
         epochs=epochs,
         batch_size=bs,
         pac=pac,
+        discriminator_steps=int(max(1, discriminator_steps)),
         log_frequency=True,
         verbose=verbose,
         enable_gpu=False,
@@ -177,6 +184,7 @@ def make_synthetic_positives(
     pac: int = 1,
     seed: int = 0,
     verbose: bool = True,
+    discriminator_steps: int = 1,
     recency_frac: float | None = None,
     time_col: str = "TransactionDT",
     min_pos_for_recency: int = 50,
@@ -226,6 +234,7 @@ def make_synthetic_positives(
         pac=pac,
         seed=seed,
         verbose=verbose,
+        discriminator_steps=discriminator_steps,
     )
 
     synth_x = sample_ctgan(model, n=synth_add, artifacts=artifacts, verbose=verbose)

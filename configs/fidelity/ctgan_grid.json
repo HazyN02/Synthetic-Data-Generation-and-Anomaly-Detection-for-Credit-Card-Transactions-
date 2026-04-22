@@ -1,0 +1,12 @@
+{
+  "method": "ctgan",
+  "seed": 42,
+  "n_folds": 4,
+  "target_pos_rates": [0.05, 0.1],
+  "max_synth_values": [5000],
+  "configs": [
+    {"name": "ctgan_e7_p1_b512", "epochs": 7, "pac": 1, "batch_size": 512},
+    {"name": "ctgan_e15_p1_b512", "epochs": 15, "pac": 1, "batch_size": 512},
+    {"name": "ctgan_e15_p5_b256", "epochs": 15, "pac": 5, "batch_size": 256}
+  ]
+}

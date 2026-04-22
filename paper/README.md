@@ -1,13 +1,17 @@
 # Paper: When Synthetic Oversampling Helps or Hurts Rare-Event Fraud Detection
 
-## Structure
+## Structure (canonical order)
 
-- `00_ABSTRACT.md` - Abstract and title
-- `01_INTRODUCTION.md` - Introduction
-- `02_METHOD.md` - Method
-- `03_EXPERIMENTS.md` - Experiments (tables/figures referenced)
-- `04_ANALYSIS.md` - Analysis
-- `05_DISCUSSION.md` - Discussion
+- `00_ABSTRACT.md` — Abstract and title  
+- `01_INTRODUCTION.md` — Introduction  
+- `02_RELATED_WORK.md` — Related work  
+- `03_METHOD.md` — Method (**locked** canonical §3; dataset, folds, oversampling, drift, metrics)  
+- `04_EXPERIMENTS.md` — Experiments (**full** tables, figures, statistics; §4)  
+- `05_ANALYSIS.md` — Analysis (interpretation, mechanisms; §5)  
+- `06_DISCUSSION.md` — Discussion and limitations  
+- `07_CONCLUSION.md` — Conclusion  
+
+**Full single-file draft:** `FULL_PAPER_DRAFT.md` (sync section order with the files above when preparing camera-ready).
 
 ## Tables (generated)
 
@@ -33,3 +37,7 @@ python -m src.paper_figures
 ```
 
 Requires: full protocol results in `results/results.csv`, SMOTE in `results/smote_baseline_results.csv`, drift in `experiments/results/drift_report.csv`.
+
+## Submission LaTeX
+
+- `main.tex` is generated from `FULL_PAPER_DRAFT.md` and includes Table 1–4 and Figures from `paper/figures/` for a clean ACM-style LaTeX workflow.

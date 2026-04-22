@@ -1,0 +1,3 @@
+preprocess_variant,fold,method,config_name,forbidden_token_count,schema_validity_rate
+default,0,tabddpm,tabddpm_t75_e4_h768,0,0.0
+less_hashing,0,tabddpm,tabddpm_t75_e4_h768,0,0.0

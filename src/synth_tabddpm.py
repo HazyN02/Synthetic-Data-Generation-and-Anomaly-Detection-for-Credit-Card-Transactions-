@@ -242,13 +242,23 @@ def make_synthetic_positives_tabddpm(
     time_col: str = "TransactionDT",
     min_pos_for_recency: int = 50,
     verbose: bool = True,
+    fit_pos_df: pd.DataFrame | None = None,
     **fit_kwargs,
 ) -> pd.DataFrame:
+    """
+    If fit_pos_df is set, TabDDPM is fit on these rows (expected fraud-only) while
+    synth_add and mixing still use the original train_df positive count (n_pos_full).
+    """
 
-    pos_df = train_df[train_df[TARGET_COL] == 1].copy()
+    real_pos = train_df[train_df[TARGET_COL] == 1]
+    n_pos_full = len(real_pos)
     neg_df = train_df[train_df[TARGET_COL] == 0]
-    n_pos_full = len(pos_df)
-    pos_df = _apply_recency_tabddpm(pos_df, recency_frac, time_col, min_pos_for_recency, verbose)
+
+    if fit_pos_df is not None:
+        pos_df = fit_pos_df[used_cols + [TARGET_COL]].copy()
+    else:
+        pos_df = real_pos.copy()
+        pos_df = _apply_recency_tabddpm(pos_df, recency_frac, time_col, min_pos_for_recency, verbose)
 
     n_pos, n_neg = len(pos_df), len(neg_df)
     total = n_pos_full + n_neg

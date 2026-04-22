@@ -1,0 +1,9 @@
+{
+  "preprocess_variants": [
+    {"name": "default", "hash_bins": 20, "max_cols": 100},
+    {"name": "less_hashing", "hash_bins": 50, "max_cols": 130}
+  ],
+  "min_real_pos_per_fold": 80,
+  "gate_a_forbidden_tokens": ["__SYNTH__"],
+  "gate_b_auc_target_max": 0.95
+}

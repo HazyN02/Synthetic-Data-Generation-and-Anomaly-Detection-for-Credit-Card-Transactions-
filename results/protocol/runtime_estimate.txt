@@ -1,5 +1,4 @@
-Run ID: 20260304_115441
-Mode: max
-Estimated runtime: ~308 min (5h 8m)
-Actual elapsed: 24m 10s
-Actual elapsed: 31m 46s
+Run ID: 20260329_145500
+Mode: quick
+Estimated runtime: ~50 min (0h 50m)
+Actual elapsed: 6m 17s

@@ -1,12 +1,13 @@
 # 1. Introduction
 
-[To be filled with full protocol results]
+Credit card fraud detection is defined by **severe class imbalance** and **temporal non-stationarity**. Fraud is the **minority** class: roughly **3.5%** of transactions are fraudulent—about **one fraud for every ~27 legitimate** transactions (**~96.5% legitimate, ~3.5% fraud**). The obvious useless baseline is to **always predict “legitimate” (non-fraud)**—i.e. never flag fraud. That rule is **correct on ~96–97% of rows** because most transactions are legitimate, so **accuracy looks high**, but it **detects none of the fraud** (zero recall on the minority class). That is why **raw accuracy is a poor headline metric** here, and why evaluations emphasize **PR-AUC**, **recall at a fixed false-positive rate**, and **cost-sensitive** choices instead.
 
-- Credit card fraud: rare events, evolving attacker behavior, temporal non-stationarity
-- Common approach: synthetic oversampling (CTGAN, SMOTE) to balance classes
-- Gap: evaluation often uses random splits; real deployment involves temporal shift
-- Research question: When does synthetic oversampling help or hurt under realistic temporal evaluation?
-- Contributions:
-  1. Empirical characterization: CTGAN/TabDDPM often hurt, SMOTE neutral; harm correlates with drift
-  2. Drift-harm relationship: domain AUC predicts synthetic oversampling degradation
-  3. Sliding-window retraining: can outperform static when validating on far future
+A standard response to imbalance is **synthetic oversampling**: augment the minority class with **interpolated** examples (**SMOTE**) or **learned** generators (**CTGAN**, **TabDDPM**). Deep models can in principle represent **multi-modal** or **non-linear** structure in the minority class better than local linear interpolation. Under **i.i.d.** validation, that promise has motivated a large literature on tabular GANs and diffusion. **Whether those gains survive realistic financial settings—where transactions are time-ordered, distributions drift, and labels arrive late—is largely unsettled**, because many studies still evaluate with **random train/test splits** that **leak the future** into training and **overstate** both accuracy and the benefit of augmentation. **We treat comparison of SMOTE versus deep generators under temporal evaluation as an open empirical question**, not as a given that “more sophisticated” synthesis wins.
+
+**Research question.** *When does synthetic oversampling genuinely improve fraud detection under realistic, time-respecting evaluation?*
+
+We address this on the **IEEE-CIS** benchmark (≈590 k e‑commerce transactions from Vesta, ≈3.5% fraud) using **leakage‑safe temporal cross‑validation** over four folds: in each fold, models train on an earlier time block and are scored only on a strictly later block. Every method uses the **same fixed preprocessing**, the **same LightGBM classifier**, and the same search over oversampling strengths, so differences are not confounded by ad‑hoc feature engineering. We compare a **real‑data baseline** (no oversampling; same LightGBM as all methods) to **SMOTE**, **CTGAN**, and **TabDDPM**, and we add two robustness checks aligned with the Fraud Detection Handbook: a **label‑delay protocol** that withholds the most recent training days before validation, and a **recency‑aware synthesis ablation** that trains generators on only the most recent fraction of positive examples.
+
+**Findings (detail).** All **tables**, **tests**, and **figures** are in **§4**; **interpretation** of patterns is in **§5**. The **abstract** states the **headline** outcomes.
+
+**Contributions.** (1) **Empirical:** controlled comparison of baseline, SMOTE, CTGAN, and TabDDPM under **temporal** evaluation, with **recency** and **label‑delay** checks (**§4**). (2) **Diagnostic:** **domain AUC** vs. oversampling impact (**§4.5**, **§5.3**). (3) **Methodological:** a **leakage‑safe** protocol and **frank** reporting of **small** and **null** effects.

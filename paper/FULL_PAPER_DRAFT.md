@@ -4,188 +4,275 @@
 
 ## Abstract
 
-Credit card fraud detection faces extreme class imbalance (~3.5% fraud) and non-stationary data: fraud patterns evolve over time, so models trained on the past degrade on future transactions. A common mitigation is synthetic oversampling (e.g., SMOTE, CTGAN, TabDDPM) to rebalance the minority class, but most evaluations ignore temporal structure and label delay. We ask: *when does synthetic oversampling genuinely improve fraud detection under realistic, time-respecting evaluation?*
+Extreme class imbalance (~3.5% fraud; ~1:27 fraud-to-legitimate) lets a majority-only predictor reach ~96.5% accuracy while failing on fraud, so PR-AUC drives evaluation. SMOTE and deep tabular generators (CTGAN, TabDDPM) are widely used; whether generators justify their complexity over SMOTE under temporal shift remains an open empirical question, because most prior work uses random splits. **Research question:** when does oversampling improve fraud detection under leakage-safe temporal evaluation? On IEEE-CIS (~590k Vesta transactions), we use four temporal folds, one shared LightGBM and preprocessing pipeline, comparing baseline, SMOTE, CTGAN, and TabDDPM, with label-delay and recency ablations. Relative to a class-weighted baseline, CTGAN and TabDDPM show moderate mean PR-AUC improvements (~+2–3 points), but no baseline comparison is statistically significant with n=4 folds (p≈0.12). SMOTE remains competitive; recency synthesis is often neutral overall (with SMOTE-recency hurting in some folds). A domain-drift signal is **consistent with** drift-dependent effects (CTGAN Pearson r≈-0.89 on n=4 fold-level points; exploratory). **Takeaway:** synthetic oversampling can help under temporal evaluation, but results remain fold- and drift-dependent; the contribution is a controlled temporal protocol and candid, low-power evidence.
 
-We study this question on the IEEE-CIS fraud dataset (~590k real e-commerce transactions from Vesta) using leakage-safe temporal cross-validation: in each fold, models train on earlier transactions and are evaluated strictly on later ones. All methods share a single, fixed feature pipeline and a single LightGBM classifier to avoid confounding from feature engineering. We compare (i) a baseline trained only on real data, (ii) SMOTE oversampling, and (iii) deep generative oversampling via CTGAN and TabDDPM. We also implement a label-delay protocol and a recency-aware synthesis ablation (training generators only on the most recent 30% of positives).
-
-Across four temporal folds, deep generative oversampling yields at most modest average gains over the baseline (CTGAN: +0.65 PR-AUC points; TabDDPM: +0.08; SMOTE: +0.27), and none of these differences are statistically significant (p ≥ 0.12). SMOTE is consistently competitive despite its simplicity. Recency-aware synthesis does not systematically help and often hurts; SMOTE restricted to recent positives clearly degrades performance. A domain-classifier "drift AUC" correlates with when CTGAN helps (r ≈ 0.91): in folds with lower train–test shift, CTGAN can slightly improve PR-AUC, whereas under stronger shift it often degrades performance. With only four folds, this correlation is exploratory, not definitive.
-
-We conclude that, on IEEE-CIS under realistic temporal and label-delay protocols, simple interpolation-based oversampling (SMOTE) is a strong baseline and deep tabular generators are far from a silver bullet. The main contribution is methodological: a carefully controlled, leakage-safe evaluation of oversampling methods under temporal shift, together with honest reporting of null and nuanced results.
-
-**Keywords:** Fraud detection, synthetic oversampling, temporal evaluation, CTGAN, TabDDPM, SMOTE, class imbalance, distribution shift.
+**Keywords:** Fraud detection, synthetic oversampling, temporal evaluation, CTGAN, TabDDPM, SMOTE, class imbalance, distribution shift
 
 ---
 
 ## 1. Introduction
 
-Credit card fraud detection is a critical problem in financial systems, characterized by extreme class imbalance (typically 1–5% fraudulent transactions) and non-stationary data distributions. Fraudsters adapt their tactics over time, so models trained on historical data often degrade when applied to future transactions. A common approach to address imbalance is **synthetic oversampling**: generating additional minority-class examples to rebalance the training set. Methods range from simple interpolation (SMOTE [1]) to deep generative models (CTGAN [2], TabDDPM [3]) that synthesize realistic-looking fraud examples.
+Credit card fraud detection is defined by **severe class imbalance** and **temporal non-stationarity**. Fraud is the **minority** class: roughly **3.5%** of transactions are fraudulent—about **one fraud for every ~27 legitimate** transactions (**~96.5% legitimate, ~3.5% fraud**). The obvious useless baseline is to **always predict “legitimate” (non-fraud)**—i.e. never flag fraud. That rule is **correct on ~96–97% of rows** because most transactions are legitimate, so **accuracy looks high**, but it **detects none of the fraud** (zero recall on the minority class). That is why **raw accuracy is a poor headline metric** here, and why evaluations emphasize **PR-AUC**, **recall at a fixed false-positive rate**, and **cost-sensitive** choices instead.
 
-Despite the growing use of generative oversampling in tabular settings, most evaluations use random train/test splits and ignore temporal structure. In production, models are trained on past data and evaluated on future data; validation sets must lie strictly in the future of training to avoid leakage. Moreover, real-world label latency—the delay between a transaction and its fraud label—means that the most recent training data may be unavailable. Evaluations that ignore these constraints can overstate the benefits of synthetic oversampling.
+A standard response to imbalance is **synthetic oversampling**: augment the minority class with **interpolated** examples (**SMOTE**) or **learned** generators (**CTGAN**, **TabDDPM**). Deep models can in principle represent **multi-modal** or **non-linear** structure in the minority class better than local linear interpolation. Under **i.i.d.** validation, that promise has motivated a large literature on tabular GANs and diffusion. **Whether those gains survive realistic financial settings—where transactions are time-ordered, distributions drift, and labels arrive late—is largely unsettled**, because many studies still evaluate with **random train/test splits** that **leak the future** into training and **overstate** both accuracy and the benefit of augmentation. **We treat comparison of SMOTE versus deep generators under temporal evaluation as an open empirical question**, not as a given that “more sophisticated” synthesis wins.
 
-**Research Question.** We ask: *When does synthetic oversampling genuinely improve fraud detection under realistic, time-respecting evaluation?*
+**Research question.** *When does synthetic oversampling genuinely improve fraud detection under realistic, time-respecting evaluation?*
 
-**Contributions.** We make three contributions:
+We address this on the **IEEE-CIS** benchmark (≈590 k e‑commerce transactions from Vesta, ≈3.5% fraud) using **leakage‑safe temporal cross‑validation** over four folds: in each fold, models train on an earlier time block and are scored only on a strictly later block. Every method uses the **same fixed preprocessing**, the **same LightGBM classifier**, and the same search over oversampling strengths, so differences are not confounded by ad‑hoc feature engineering. We compare a **real‑data baseline** (no oversampling; same LightGBM as all methods) to **SMOTE**, **CTGAN**, and **TabDDPM**, and we add two robustness checks aligned with the Fraud Detection Handbook: a **label‑delay protocol** that withholds the most recent training days before validation, and a **recency‑aware synthesis ablation** that trains generators on only the most recent fraction of positive examples.
 
-1. **Empirical characterization:** We compare baseline (real data only), SMOTE, CTGAN, and TabDDPM on the IEEE-CIS fraud dataset under leakage-safe temporal cross-validation. We find that deep generative oversampling yields at most modest average gains (0–1 PR-AUC points) over the baseline, while SMOTE is consistently competitive. None of the method comparisons reach statistical significance across four folds.
+**Findings (detail).** All **tables**, **tests**, and **figures** are in **§4**; **interpretation** of patterns is in **§5**. The **abstract** states the **headline** outcomes.
 
-2. **Drift-harm relationship:** We quantify distribution shift via a domain-classifier AUC and show that higher shift correlates with synthetic oversampling degrading performance. For CTGAN, this correlation is r ≈ 0.91 (exploratory, n=4 folds). This provides a practical signal: when train–test drift is high, augmentation learned from the past may be misleading.
-
-3. **Label-delay and recency ablations:** We implement a label-delay protocol (0, 7, 14 days) and a recency-aware synthesis ablation (training generators only on the most recent 30% of positives). Recency-aware synthesis does not systematically help and often hurts; SMOTE restricted to recent positives is clearly detrimental. Label delay degrades all methods proportionally; synthetic oversampling does not rescue performance under delay.
-
-We argue that future fraud-detection work should report performance under temporal protocols before claiming gains from sophisticated synthetic data generators.
-
+**Contributions.** (1) **Empirical:** controlled comparison of baseline, SMOTE, CTGAN, and TabDDPM under **temporal** evaluation, with **recency** and **label‑delay** checks (**§4**). (2) **Diagnostic:** **domain AUC** vs. oversampling impact (**§4.5**, **§5.3**). (3) **Methodological:** a **leakage‑safe** protocol and **frank** reporting of **small** and **null** effects.
 ---
 
 ## 2. Related Work
 
-**Fraud Detection and the IEEE-CIS Benchmark.** The IEEE-CIS Fraud Detection dataset [4] is a widely used benchmark of real e-commerce transactions from Vesta, with ~590k training samples and ~3.5% fraud rate. Numerous studies have applied gradient boosting, neural networks, and ensemble methods to this dataset. A recurring theme is the importance of temporal evaluation: random splits can leak future information and overstate performance [5].
+**Fraud detection, benchmarks, and time.** The IEEE-CIS Fraud Detection dataset [4] is a widely used public benchmark of e‑commerce transactions (Vesta, Kaggle); a large fraction of published work still reports scores from **random** train/test splits. Calibrated and sampling‑aware learning under imbalance has been studied for credit risk and fraud [5]; more recent work stresses that **evaluation must respect time**—otherwise models can exploit **future information** and **overstate** performance [6]. Our work sits in that line: we treat **temporal leakage** as a first‑class problem.
 
-**Synthetic Oversampling.** SMOTE [1] interpolates between minority examples in feature space and remains a standard baseline for imbalanced classification [8]. Deep generative approaches for tabular data include CTGAN and TVAE [2] (conditional GAN and tabular VAE from Xu et al.) and TabDDPM [3] (diffusion-based generation). These are often evaluated on synthetic data benchmarks or with random splits; few studies systematically compare them under temporal evaluation for fraud.
+**Synthetic oversampling.** SMOTE [1] interpolates between minority examples in feature space and remains a standard baseline for imbalanced classification [8]. For tabular data, **CTGAN** and **TVAE** [2] learn conditional generators; **TabDDPM** [3] uses diffusion. These methods are often benchmarked on **synthetic tabular tasks** or **i.i.d. splits**; **head‑to‑head comparison under time‑ordered fraud data** is still relatively rare, which motivates our **empirical** question.
 
-**Temporal Evaluation and Label Delay.** The Fraud Detection Handbook [6] recommends time-respecting splits and explicit modeling of label latency. We adopt a similar protocol: temporal folds where validation lies strictly in the future of training, and an optional label-delay variant that drops the most recent days from training to simulate label latency.
+**Why compare deep generators to SMOTE** (beyond “more complex is better”). Interpolation assumes local linear structure in feature space; **generators** can in principle **hallucinate** diverse minority modes, which may help when **training and test distributions are similar**. Under **temporal shift**, that advantage is **not guaranteed**—generators may **fit past fraud** and **amplify mismatch**—so **SMOTE versus CTGAN/TabDDPM** is an **open** question we **do not** assume resolved.
 
-**Distribution Shift and Domain Adaptation.** Domain classifier AUC is a common proxy for covariate shift [7]. We use it to quantify train–validation shift and examine whether it predicts when synthetic oversampling helps or hurts.
+**Label delay and drift.** The Fraud Detection Handbook [6] recommends **time‑respecting** splits and explicit **label latency**; we follow that spirit with a **label‑delay** variant. **Domain classifier** scores are a common **proxy for covariate shift** [7]; we use **domain AUC** between train and validation blocks to ask **when** augmentation **helps or hurts**, in line with shift‑aware ML [7].
 
+**Positioning.** We do **not** propose a new oversampling algorithm; we **empirically** compare **existing** methods under **temporal** evaluation (**§3–4**).
 ---
 
 ## 3. Method
 
-### 3.1 Dataset and Temporal Evaluation
+> **Locked (canonical).** This section is the source of truth for §3 in the camera-ready paper.
 
-**Dataset.** We use the IEEE-CIS Fraud Detection dataset (Kaggle), comprising ~590k transactions with ~3.5% labeled as fraudulent (`isFraud = 1`). The time variable `TransactionDT` is a monotonically increasing delta in seconds that orders transactions.
+### 3.1 Dataset and temporal evaluation
 
-**Temporal Folds.** We follow the Fraud Detection Handbook's recommendation to respect time in both training and validation. Preprocessing is fit per fold on the training block only and then applied to the validation block, avoiding leakage from global preprocessing. We construct four temporal folds: in fold i, we train on an initial time prefix and validate on the immediately following block. There is no random shuffling—validation always lies strictly in the future of training. All methods use the same fold boundaries.
+**Data.** We use the **IEEE-CIS Fraud Detection** training split (Kaggle): real e‑commerce transactions from Vesta, **≈590 k** rows, **≈3.5%** fraudulent (`isFraud = 1`)—the same **minority‑class** regime as in §1. We do **not** use the Kaggle **test** file (labels withheld); all scores are on **held‑out blocks** carved from the training data. The time column **`TransactionDT`** is a **monotonically increasing** offset in **seconds** (competition‑relative, not a calendar clock); it **orders** rows. The target is **binary fraud**.
 
-**Label-Delay Protocol.** For a given delay δ (in days), we identify the start time of the validation block and remove from training any transaction with `TransactionDT` within δ days of that start. This mimics real-world label latency. We run 0-, 7-, and 14-day delays and report when folds become too sparse.
+**Temporal folds (expanding window).** We sort by `TransactionDT` and divide the timeline into **\(K{+}1\)** **equal‑sized** row blocks (\(K=4\) folds). **Fold** \(i\) **trains** on the **concatenation** of blocks **0 through \(i\)** and **validates** on block **\(i{+}1\)**. So the training set **grows** with later folds; validation is always the **next** unseen segment—**strictly in the future** of that fold’s training data. There is **no random shuffling**. **Every** method shares the **same** fold definitions.
 
-### 3.2 Models and Oversampling Protocols
+**Preprocessing and leakage.** Feature construction uses one **shared** pipeline (§3.2 below). The pipeline is **fit only on the training rows of each fold** and **applied** to validation—**never** fit on validation or on the full table before splitting. That blocks **leakage** from **global** statistics that would **peek** at future transactions.
 
-All classifiers are **LightGBM** models with the same hyperparameters. Before modeling, we apply a single shared preprocessing pipeline: drop high-cardinality columns, apply hashing/grouping to categoricals, and limit the feature set to ~100 mixed numerical/categorical columns. The pipeline is fit only on training data in each fold and applied to validation data.
+**Where synthetic data appears.** SMOTE and generative models run **only** on **training** rows **after** preprocessing. **Synthetic fraud rows are never added to validation**; reported metrics are always **real** transactions at **true** labels.
 
-| Method | Description |
-|--------|-------------|
-| **Baseline** | LightGBM on real data only (class weights). |
-| **SMOTE** | Interpolation-based oversampling to target fraud rates 5%, 10%, 20%. |
-| **CTGAN** | Conditional Tabular GAN trained on positives only; synthetic positives added to reach same target rates. |
-| **TabDDPM** | Tabular diffusion model trained on positives only; used analogously to CTGAN. |
+**Label delay.** To mimic **label latency**, we remove training rows that are **too recent** relative to validation. Let \(t_{\mathrm{val\_start}} = \min(\texttt{TransactionDT})\) on the validation block. For delay \(\delta\) **days**, we keep only training rows with \(\texttt{TransactionDT} \le t_{\mathrm{val\_start}} - \delta \times 86400\) **seconds**. (Equivalently: a **gap** of \(\delta\) days between the **end** of usable training time and the **start** of validation.) We report \(\delta \in \{0, 7, 14\}\). If too few rows or **fewer than 50** training frauds remain, we **skip** that fold.
 
-**Recency-Aware Ablation.** We test whether training generators only on the most recent 30% of positives (by `TransactionDT`) helps. For SMOTE, we restrict to recent positives before interpolation. We use ρ = 0.3 with a safeguard that falls back to all positives if too few fraud cases remain.
+### 3.2 Preprocessing and downstream classifier
 
-### 3.3 Drift Quantification
+**Features.** We **drop** high‑cardinality / sparse columns, **hash or group** selected categoricals (e.g. email‑domain fields), and keep **≈100** numerical/categorical columns suitable for **LightGBM** and the **generators**. Categorical handling is aligned between **tree** training and **synthetic** pipelines where required.
 
-We quantify distribution shift via a **domain classifier AUC**: for each fold, we label training as domain 0 and validation as domain 1, train a LightGBM to distinguish them, and report ROC-AUC. A value near 0.5 indicates little shift; higher values indicate stronger covariate shift. Given only four folds, correlations with oversampling impact are exploratory.
+**Classifier (fixed across methods).** All oversampling conditions use the **same** **LightGBM** hyperparameters so that differences reflect **data augmentation**, not a **different learner**. Our implementation uses **`n_estimators=300`**, **`learning_rate=0.05`**, **`num_leaves=64`**, **`min_child_samples=200`**, **`subsample=0.8`**, **`colsample_bytree=0.8`**, **`objective=binary`**, **`random_state=42`** (see appendix for a one‑line table). The **baseline** is also **class‑weighted** via **`scale_pos_weight = n_neg / n_pos`** while keeping **real** labels only and **no** synthetic oversampling.
 
-### 3.4 Evaluation Metrics
+### 3.3 Oversampling protocols
 
-- **PR-AUC (Average Precision):** Summarizes the full precision–recall curve; more informative than ROC-AUC under strong imbalance.
-- **Recall@1% FPR:** Fraction of frauds caught when constraining false positive rate to 1%; approximates production operating regions.
+**Target fraud rates.** For SMOTE, CTGAN, and TabDDPM we vary the **post‑augmentation** minority proportion via a **target positive rate** \(\in \{5\%, 10\%, 20\%\}\). **Main** tables in this paper **aggregate** results by taking, **per fold and method**, the **best** validation **PR‑AUC** across that grid (same validation fold used for scoring). **5%** is the **canonical** setting we emphasize for **label‑delay** runs and for **interpretability**; sensitivity to the rate is part of the **experimental** design.
 
+**SMOTE [1].** **Synthetic Minority Over‑sampling** runs in the **preprocessed** feature space. We use **`k_neighbors=5`** (capped by minority count − 1), **`random_state=42`**, and optionally cap synthetic count (**`max_synth`**) for speed. SMOTE **only** touches **training** rows.
+
+**CTGAN [2].** We fit the **ctgan** implementation on **fraud (positive) training** rows only in the **generator** feature space, then **sample** synthetic fraud until the **target** positive rate is reached, and **concatenate** with **real** training data before fitting LightGBM. In our **canonical** (medium) protocol runs used for the main tables, CTGAN uses **`epochs=7`**, **`batch_size=512`**, **`pac=1`**, **`seed=0`**. **GPU** is disabled for reproducibility across environments.
+
+**TabDDPM [3].** We train a **Gaussian** tabular diffusion model on **positive** training rows, **sample** synthetic positives to the **same** target rates, then train LightGBM. In our **canonical** (medium) protocol runs used for the main tables, TabDDPM uses **`timesteps=75`**, **`epochs=4`**, **`hidden_dims=[768,768]`**, **Adam** **lr** \(10^{-4}\) and **batch_size=1024** (gradient clip as in the implementation).
+
+To address concerns about undertraining, we ran a **max-convergence sanity check** with much larger budgets (**CTGAN epochs=50**, **TabDDPM epochs=50**). Mean PR-AUC shifts remained small and inconsistent, suggesting that the small effect sizes in the main protocol are not driven solely by insufficient generator training time.
+
+**Recency ablation (\(\rho=0.3\)).** For each generator and for SMOTE, we restrict **positive** training examples to the **latest 30%** by `TransactionDT` (with a **minimum** count fallback to **all** positives). **Negatives** stay **unchanged** for SMOTE; generators see only **recent** fraud for training.
+
+### 3.4 Drift quantification
+
+We train a **domain classifier** (**LightGBM**) to separate **training** (domain 0) from **validation** (domain 1), **excluding** pure time/ID features. We report **ROC‑AUC** (**domain AUC**): **~0.5** suggests **little** shift; **higher** values indicate **stronger** covariate shift. We relate this to **per‑fold** changes in **PR‑AUC** vs. the baseline (**exploratory**, **four** folds).
+
+### 3.5 Evaluation metrics and statistics
+
+**Primary:** **PR‑AUC** (Average Precision)—**threshold‑free** and standard under **extreme** imbalance.
+
+**Operating point:** **Recall at 1% FPR**—fraction of frauds caught when the **false‑positive rate** on transactions is **1%**.
+
+We report **mean ± std** **across** folds. **Method** comparisons use **paired permutation tests** over folds (**§4 Experiments**).
 ---
 
 ## 4. Experiments
 
-### 4.1 Setup
+> **Scope.** Main text focuses on **no label delay** (\(\delta=0\)) unless noted. **Label-delay** and **sliding-window** analyses follow the same pipeline as §3; placement details are in `EXPERIMENTS_SCOPE.md` if you need appendix vs main text.
 
-- **Dataset:** IEEE-CIS Fraud Detection, ~590k transactions, ~3.5% fraud.
-- **Folds:** 4 temporal folds; preprocessing fit per fold on train only.
-- **Classifier:** LightGBM (shared hyperparameters across methods).
-- **Oversampling target rates:** 5%, 10%, 20% (best per method per fold reported in main tables).
+All numbers below come from **`paper/tables/`** (CSV) and match **`python -m src.run_unified_analysis`** on the saved protocol runs.
 
-### 4.2 Main Results
+### 4.1 Setup (summary)
 
-Table 1 reports mean PR-AUC and Recall@1% FPR across four temporal folds. Baseline achieves 0.564 ± 0.031 PR-AUC and 0.472 ± 0.022 Recall@1% FPR. CTGAN yields 0.570 ± 0.027 PR-AUC; TabDDPM 0.565 ± 0.029; SMOTE 0.567 ± 0.024. All oversampling methods are within ~1 PR-AUC point of each other and the baseline. Recency-aware variants (ctgan_recency03, tabddpm_recency03) perform similarly to their non-recency counterparts; smote_recency03 is clearly worse (0.552 ± 0.031).
+**Protocol** is **§3** (folds, preprocessing, oversampling, metrics). **Main** tables pick the **best** **target fraud rate** in \(\{5\%,10\%,20\%\}\) **per fold and method** by validation **PR‑AUC**; **recency** uses \(\rho=0.3\). **Tests:** **10,000**‑permutation **paired** comparisons on fold‑level **PR‑AUC** (`src/statistical_tests.py`). **Selection‑on‑validation** caveats: **§5.6**.
 
-**Table 1. Mean PR-AUC and Recall@1% FPR across four temporal folds (no label delay).**
+### 4.2 Main results: mean PR‑AUC and Recall@1% FPR
 
-| Method | PR-AUC (mean ± std) | Recall@1% FPR (mean ± std) |
+**Table 1. Mean PR‑AUC and Recall@1% FPR across four temporal folds (no label delay).**  
+Table reports **mean ± std** over folds. **PR‑AUC** is the **primary** metric; **Recall@1% FPR** is the **fixed**‑FPR operating point from §3.5.
+
+| Method | PR‑AUC (mean ± std) | Recall@1% FPR (mean ± std) |
 |--------|---------------------|----------------------------|
-| Baseline | 0.564 ± 0.031 | 0.472 ± 0.022 |
-| CTGAN | 0.570 ± 0.027 | 0.478 ± 0.023 |
-| TabDDPM | 0.565 ± 0.029 | 0.472 ± 0.021 |
-| SMOTE | 0.567 ± 0.024 | 0.476 ± 0.019 |
-| CTGAN (recency 0.3) | 0.569 ± 0.025 | 0.478 ± 0.023 |
-| TabDDPM (recency 0.3) | 0.564 ± 0.026 | 0.471 ± 0.022 |
-| SMOTE (recency 0.3) | 0.552 ± 0.031 | 0.470 ± 0.025 |
+| Baseline | 0.544 ± 0.025 | 0.451 ± 0.023 |
+| CTGAN | 0.570 ± 0.027 | 0.478 ± 0.022 |
+| TabDDPM | 0.565 ± 0.029 | 0.472 ± 0.026 |
+| SMOTE | 0.567 ± 0.024 | 0.476 ± 0.017 |
+| CTGAN (recency 0.3) | 0.569 ± 0.025 | 0.478 ± 0.018 |
+| TabDDPM (recency 0.3) | 0.564 ± 0.026 | 0.471 ± 0.023 |
+| SMOTE (recency 0.3) | 0.552 ± 0.031 | 0.470 ± 0.026 |
 
-### 4.3 Fold-by-Fold Results
+**Figure.** `figures/method_comparison_pr_auc.pdf` (and `.png`) bar‑charts **PR‑AUC** by **method** and **fold** for quick visual comparison.
 
-Table 2 shows PR-AUC per fold. No method consistently dominates. In Fold 0 (domain AUC 0.82), all oversampling methods slightly beat baseline. In Fold 1 (domain AUC 0.89), CTGAN leads; TabDDPM underperforms. In Fold 2 (domain AUC 0.92), TabDDPM is best. In Fold 3 (domain AUC 0.88), CTGAN and SMOTE match; TabDDPM is slightly below. SMOTE restricted to recency (smote_recency03) is the worst in Folds 0 and 1.
+*Source: `paper/tables/method_summary.csv`, `unified_comparison.csv`.*
 
-**Table 2. PR-AUC by fold and method (best target rate per method).**
+### 4.3 Fold-by-fold PR‑AUC and domain shift
 
-| Fold | Baseline | CTGAN | TabDDPM | SMOTE | SMOTE (rec) |
-|------|----------|-------|---------|-------|-------------|
-| 0 | 0.543 | 0.555 | 0.554 | 0.553 | 0.518 |
-| 1 | 0.578 | 0.585 | 0.562 | 0.576 | 0.552 |
-| 2 | 0.601 | 0.600 | 0.605 | 0.596 | 0.593 |
-| 3 | 0.534 | 0.542 | 0.537 | 0.541 | 0.543 |
+**Table 2. Fold-by-fold PR‑AUC and domain shift.**  
+Table lists **PR‑AUC** per **fold** for **core** methods (best **target rate** per cell). **Domain AUC** (train vs. validation, **no** raw time in features) quantifies **shift** for that fold.
 
-### 4.4 Statistical Comparisons
+| Fold | Domain AUC | Baseline | CTGAN | TabDDPM | SMOTE |
+|------|------------|----------|-------|---------|-------|
+| 0 | 0.824 | 0.547 | 0.560 | 0.554 | 0.553 |
+| 1 | 0.885 | 0.578 | 0.585 | 0.562 | 0.576 |
+| 2 | 0.919 | 0.601 | 0.600 | 0.605 | 0.596 |
+| 3 | 0.885 | 0.534 | 0.542 | 0.537 | 0.541 |
 
-We run paired permutation tests (10,000 permutations) across folds for each method pair. Table 3 reports mean delta (method − baseline) and p-values. None of the comparisons are significant at α = 0.05. CTGAN shows the largest positive delta vs baseline (+0.0065 PR-AUC, p = 0.245). SMOTE vs baseline: +0.0027, p = 0.50. TabDDPM vs baseline: +0.0008, p = 1.0.
+*Interpretation of fold‑level variation:* **§5.2**.
 
-**Table 3. Paired permutation tests: mean PR-AUC delta (method − baseline) and p-values.**
+*Source: `unified_comparison.csv`, `experiments/results/drift_report.csv` (domain AUC column `domain_auc_holdout_no_time`).*
 
-| Comparison | Mean Δ | p-value | Significant? |
-|------------|--------|---------|--------------|
-| Baseline vs SMOTE | +0.0027 | 0.50 | No |
-| Baseline vs CTGAN | +0.0065 | 0.245 | No |
-| Baseline vs TabDDPM | +0.0008 | 1.0 | No |
-| CTGAN vs SMOTE | −0.0038 | 0.12 | No |
-| TabDDPM vs SMOTE | +0.0019 | 0.75 | No |
-| TabDDPM vs CTGAN | +0.0057 | 0.62 | No |
+### 4.4 Statistical comparisons
 
-### 4.5 Drift-Harm Analysis
+**Table 3. Paired permutation tests on fold-level PR‑AUC differences.**  
+Table summarizes **paired** tests on **fold‑level** mean **PR‑AUC** differences. **Mean Δ** is **method A − method B** (convention from `statistical_comparisons.csv`).
 
-We compute the correlation between domain AUC and PR-AUC delta (baseline − method) per fold. Higher domain AUC indicates stronger train–validation shift. For CTGAN, correlation r ≈ 0.91: when shift is high, CTGAN tends to hurt more. For TabDDPM, r ≈ 0.37; for SMOTE, r ≈ 0.80. With only four folds, these are exploratory; the pattern suggests that synthetic oversampling from the training distribution degrades when the validation distribution has shifted.
+| Comparison | Mean Δ (PR‑AUC) | *p* | Significant at α = 0.05? |
+|------------|-----------------|-----|---------------------------|
+| SMOTE − baseline | +0.0229 | 0.12 | No |
+| CTGAN − baseline | +0.0267 | 0.12 | No |
+| TabDDPM − baseline | +0.0210 | 0.12 | No |
+| CTGAN − SMOTE | +0.0038 | 0.12 | No |
+| TabDDPM − SMOTE | −0.0019 | 0.75 | No |
+| TabDDPM − CTGAN | −0.0057 | 0.62 | No |
 
-### 4.6 When It Helps or Hurts
+*Source: `paper/tables/statistical_comparisons.csv`.*
 
-We classify each method as "helps" (mean delta < −0.01), "neutral", or "hurts" (mean delta > 0.01). CTGAN, TabDDPM, and SMOTE are all neutral. SMOTE (recency 0.3) is the only method that clearly hurts (mean delta +0.012, verdict: hurts).
+**Power note.** These tests are performed on fold-level differences with **n = 4** points; permutation-test p-values therefore have limited power for small effects. We interpret the results as “no strong evidence of improvement,” and primarily rely on effect-size magnitude and fold variability rather than p-values.
 
-### 4.7 Label-Delay Ablation
+### 4.5 Drift and oversampling effect relative to the baseline
 
-Table 4 reports mean PR-AUC by label delay (0, 7, 14 days). All methods decline as delay increases. At 0 days, baseline 0.555; at 7 days, 0.542; at 14 days, 0.518. Synthetic oversampling does not rescue performance under delay; methods track the baseline. SMOTE (recency) remains worst at all delays.
+**Pearson** **r** (**domain AUC** vs. method **PR‑AUC − baseline PR‑AUC**, **n = 4** fold-level points): **CTGAN** **-0.89**, **TabDDPM** **-0.80**, **SMOTE** **-0.86** (`drift_correlations.csv`; **exploratory**). We treat this as **consistent with** drift-dependent behavior rather than evidence of a robust correlation.
 
-**Table 4. Mean PR-AUC by label delay.**
+**Figure.** `figures/drift_vs_harm.pdf` (y-axis is **baseline − method**, so **negative** values mean oversampling **helps**).
 
-| Delay | Baseline | CTGAN | TabDDPM | SMOTE | SMOTE (rec) |
-|-------|----------|-------|---------|-------|-------------|
-| 0 days | 0.555 | 0.559 | 0.556 | 0.559 | 0.545 |
-| 7 days | 0.542 | 0.544 | 0.539 | 0.543 | 0.516 |
-| 14 days | 0.518 | 0.520 | 0.515 | 0.522 | 0.488 |
+*Source: `paper/tables/drift_harm_analysis.csv`.*
 
-### 4.8 Sliding vs Static Retraining
+### 4.6 When oversampling helps or hurts (verdict)
 
-We compare static training (all past data) vs sliding-window training (fixed recent window) across five folds. Static: 0.582 ± 0.024 PR-AUC; Sliding: 0.570 ± 0.023. Static slightly outperforms; sliding does not clearly help under our fold structure.
+Aggregating **mean** **(baseline PR‑AUC − method PR‑AUC)** across folds (see `when_it_helps_hurts.csv`): **CTGAN**, **TabDDPM**, **SMOTE**, and their **recency** variants are labeled **helps** under our **±0.01** band; **SMOTE (recency 0.3)** is labeled **neutral**.
+
+### 4.7 Label-delay ablation
+
+**δ ∈ {0, 7, 14}** days (§3.1). **Baseline** **mean** **PR‑AUC** (aggregated rows): **~0.547 / ~0.534 / ~0.488** at **0 / 7 / 14** (`canonical_by_delay.csv`; **14‑day** **sparse**). **Interpretation:** **§5.5**.
+
+**Figure.** `figures/label_delay_ablation.pdf`.
+
+*Source: `paper/tables/canonical_by_delay.csv`.*
+
+### 4.8 Sliding vs. static training (supplementary)
+
+**Five** splits; **mean** **PR‑AUC** **~0.583** (**static**) vs **~0.570** (**sliding**) (`results/sliding_window/results.csv`).
+
+**Figure.** `figures/sliding_window_comparison.pdf`.
+
+### 4.9 Synthetic-sample fidelity diagnostics (supplementary)
+
+To address sample-quality concerns for **CTGAN** and **TabDDPM**, we run a lightweight fidelity audit on synthetic positives (`src/run_fidelity_analysis.py`) across the same **4 temporal folds**. For tractability, this uses **target rate 10%**, **max 5000 synthetic positives/fold**, and reduced generator budgets (**CTGAN epochs=3**, **TabDDPM epochs=2, timesteps=50**). We report:
+
+- **Numeric quantile L1** (lower is better),
+- **Categorical TV distance** (lower is better),
+- **Correlation MAD** on numeric features (lower is better),
+- **Real-vs-synthetic AUC** from a discriminator (closer to 0.5 is better).
+
+| Method | Numeric quantile L1 ↓ | Categorical TV ↓ | Correlation MAD ↓ | Real-vs-synth AUC (ideal 0.5) |
+|--------|------------------------|------------------|-------------------|-------------------------------|
+| CTGAN | 9,829.68 | 0.145 | 0.112 | 1.000 |
+| TabDDPM | 18,916,262.15 | 1.000 | 0.118 | 1.000 |
+
+These diagnostics indicate **low distribution fidelity** in this lightweight setting, especially for TabDDPM on mixed-type features. This helps explain why downstream gains remain inconsistent and why we treat generative results as protocol-dependent rather than universally reliable.
+
+*Source: `paper/tables/synthetic_fidelity.csv`, `paper/tables/synthetic_fidelity_summary.csv`.*
 
 ---
 
-## 5. Discussion
-
-**Deep generative oversampling is not a game changer.** On IEEE-CIS under time-respecting validation, CTGAN and TabDDPM deliver at most modest average gains over a strong real-data baseline. SMOTE is consistently competitive. This contrasts with benchmarks that use random splits, where generative methods can appear more beneficial.
-
-**Recency-aware synthesis mostly fails.** Training CTGAN/TabDDPM or SMOTE only on the most recent 30% of positives does not systematically help and often hurts. For SMOTE, restricting to recent positives is clearly detrimental. Naïve recency filtering can remove valuable minority modes.
-
-**Drift-harm is visible but exploratory.** Domain-classifier AUC correlates with when synthetic oversampling degrades performance, especially for CTGAN. With four folds, this is hypothesis-generating; monitoring drift in production may help decide when to trust augmentation.
-
-**Practical implications.** Practitioners should not assume deep generators will fix imbalance. A leakage-safe temporal protocol and a well-tuned tree model (with class weights or SMOTE) are sensible first steps. Synthetic oversampling—especially via deep generators—should be deployed for clearly identified pain points, not as a default.
-
+**Reproducibility.** Regenerate tables: `python -m src.run_unified_analysis`. Regenerate figures: `python -m src.paper_figures`.
 ---
 
-## 6. Limitations
+## 5. Analysis
 
-- **Single dataset:** Conclusions are drawn from IEEE-CIS; results on other fraud portfolios may differ.
-- **Limited folds:** Four temporal folds constrain statistical power; correlations are exploratory.
-- **Restricted ablations:** We use 7- and 14-day label delays and a single recency fraction (0.3).
-- **No adversary or privacy analysis:** We do not model adaptive fraudsters or quantify synthetic sample privacy.
+> **Role.** §4 reports **numbers**; here we interpret **patterns** without repeating tables. Broader implications and limitations are in §6.
 
+### 5.1 Why low-power results matter
+
+The paired tests in §4.4 do not reach α = 0.05, despite moderate mean PR-AUC deltas versus the baseline. Under temporal evaluation, that is still informative: it characterizes what generic SMOTE, CTGAN, and TabDDPM pipelines achieve on a standard benchmark when leakage is controlled. Importantly, fold-level **n = 4** gives these tests limited power, so we treat p-values as weak evidence and instead emphasize effect sizes, fold variability, and protocol realism.
+
+### 5.2 Fold heterogeneity
+
+Rankings move by fold (§4.3) because validation regimes differ and training grows in the expanding window. Oversampling perturbs training only; it cannot stabilize rankings across shifts. Random train/test splits suppress this variance—one reason offline leaderboards can mislead.
+
+### 5.3 Generators, drift, and drift-dependent effects
+
+Domain AUC spans roughly 0.82–0.92 (§4.3). Because our drift metric is correlated with fold difficulty, the correlation sign depends on how “effect” is defined; in our tables we report deltas relative to the baseline, so negative r values (n=4) are exploratory and best read as: **higher drift is associated with larger absolute augmentation effects** (often benefits in this run), not as a stable causal relationship. A plausible hypothesis remains that generators fit the training fraud distribution; under covariate shift, synthetic points can either improve coverage or amplify mismatch, depending on how fraud modes evolve. SMOTE interpolates between real points; GANs and diffusion sample new points—different failure modes.
+
+### 5.4 Recency
+
+Recency restricts positives to the latest **30%**. Under temporal evaluation, this creates an asymmetry: **CTGAN-recency** and **TabDDPM-recency** remain close to their non-recency variants (mean PR‑AUC ≈ 0.569 and 0.564), whereas **SMOTE-recency** drops noticeably (mean PR‑AUC ≈ 0.552). In §4.6, SMOTE-recency is therefore **neutral overall** (though it hurts in some folds). A plausible reading is that thinning positives reduces minority coverage for interpolation-based SMOTE more severely than it damages the generators’ learned mapping.
+
+### 5.5 Label delay
+
+Delay removes labeled training rows before validation (§3.1). Oversampling cannot recover features from transactions that were never in training; the parallel decline across methods in §4.7 matches that story.
+
+### 5.6 Selection on validation
+
+Choosing the best target fraud rate per fold and method on validation PR-AUC (§3.3, §4.1) can be optimistic relative to a fixed rate chosen a priori. Mitigations: an inner temporal split for rate selection, or reporting a fixed 5% configuration—see §3.3 for the honest statement.
+
+### 5.7 Why fidelity checks matter
+
+The supplementary fidelity audit (§4.9) gives a useful mechanistic signal: synthetic samples are easy to distinguish from real frauds (real-vs-synth AUC \(\approx 1.0\) for both CTGAN and TabDDPM in that run), and TabDDPM shows especially weak categorical fidelity there. This does not invalidate the downstream benchmark results, but it clarifies why augmentation effects can be unstable: utility can improve in some folds even when synthetic realism is imperfect, and weak fidelity can cap generalization under shift.
+---
+
+## 6. Discussion
+
+### 6.1 Synthesis
+
+Sections 4–5 give results and analysis; we do not repeat them here. In short: on IEEE-CIS under our protocol, generative oversampling shows moderate average gains over the baseline, but these gains are not statistically significant with four folds (n=4); recency and label-delay behavior follow §5; drift–performance links are hypothesis-generating. Generalizing beyond this benchmark or to production would require new studies.
+
+### 6.2 Practical implications for practitioners
+
+- **Generators are optional, not default.** CTGAN and TabDDPM require substantially more training iterations and operational effort than SMOTE; in our study they show **moderate mean PR‑AUC gains** over baseline but **no** statistically significant baseline improvements with n=4 folds. The extra overhead is hard to justify unless it works in *your* temporally split validation (see §4).
+- **Start with simpler tools (and a good protocol)**: A leakage‑safe temporal validation scheme and a well‑tuned tree model on real data already go a long way. If more recall is needed, SMOTE (or a carefully regularized variant) on a well‑engineered feature space is a sensible first step before deploying heavy generative models.
+- **Monitor drift explicitly**: Even though our drift analysis is exploratory, the pattern reinforces a basic operational lesson: when train–test drift is high, augmentation effects are more variable and can flip sign. Monitoring a domain‑classifier AUC or related shift metrics should be standard practice for deciding when to trust augmentation and when to retrain or simplify.
+- **Treat synthetic oversampling as a surgical tool, not a default**: Given the modest and inconsistent gains we observe, oversampling—especially via deep generators—should be deployed for clearly identified pain points (e.g., specific rare fraud typologies), not as a blanket solution to imbalance. In regulated financial settings, synthetic-data pipelines can also raise privacy and compliance considerations (e.g., GDPR-style data minimization), so prefer simpler methods unless deep generation offers clear, temporally robust benefits.
+
+### 6.3 Ethical considerations (for AIES-style review)
+
+Because synthetic data can be a privacy-adjacent artifact and can change what downstream models learn from rare events, ethical implications deserve explicit attention even in a performance-focused evaluation. We do not study demographic fairness directly, nor do we quantify how synthetic fraud impacts bias in protected attributes; however, practitioners should treat synthetic augmentation as a potential risk factor for amplifying dataset-specific correlations that correlate with sensitive groups. In addition, fraud detection systems operate under asymmetric costs: false negatives typically have immediate financial and customer impact, while false positives create operational burden and customer friction. Our results suggest that oversampling—especially deep generation—should be deployed only when it yields **clear** and **temporally robust** gains under leakage-safe protocols, since uncontrolled augmentation could otherwise increase harm.
+
+### 6.4 Limitations
+
+- **Single primary dataset**: Our main conclusions are drawn from a single, albeit important, public benchmark (IEEE‑CIS). While we briefly examine other datasets in a separate analysis, we deliberately avoid over‑generalizing beyond IEEE‑CIS and emphasize that results on other fraud portfolios may differ.
+- **Tabular, transaction‑level view only**: We work with the anonymized tabular representation provided by Vesta, without access to raw sequences, card‑holder histories beyond the engineered features, or graph structure. Some failure modes of synthetic oversampling—such as violating long‑range dependencies across accounts or merchants—are therefore only partially observable.
+- **Limited folds:** We use **four** temporal folds; this bounds statistical power and makes paired p-values less informative for small effects. Drift correlations are exploratory.
+- **Lightweight fidelity diagnostics:** We added supplementary distribution-fidelity checks for synthetic positives, but they are coarse and use reduced generator budgets for tractability; stronger, fully tuned fidelity evaluation remains future work.
+- **Restricted label‑delay and recency settings**: We implement 7‑day and 14‑day delays and a single recency fraction (30%) for tractability. In production, label delays and temporal decay patterns may be much more complex. It remains possible that more finely tuned delay windows or recency strategies would yield larger benefits, though at the cost of additional complexity and overfitting risk.
+- **No explicit adversary modeling or privacy analysis**: We do not model adaptive fraudsters reacting to deployed models, nor do we quantify privacy properties of synthetic samples. These are important for deployment, but orthogonal to our primary goal of understanding when oversampling helps or hurts under temporal shift.
+
+### 6.5 Directions for future work
+
+- **Multi‑dataset temporal evaluation**: Extending this protocol to other real, time‑stamped fraud datasets (e.g., those in the Fraud Dataset Benchmark) would test whether our observations about SMOTE, CTGAN, and TabDDPM hold beyond IEEE‑CIS or are dataset‑specific.
+- **Richer, structure‑aware generators**: Applying sequence‑ or graph‑based generative models that operate on card‑ or merchant‑level histories might better preserve the structures that matter for fraud, and could be compared head‑to‑head with tabular generators under the same temporal protocol.
+- **More realistic label‑delay regimes**: Combining longer and heterogeneous delay windows with rolling model updates, as in the Fraud Detection Handbook, would bring evaluation even closer to production and could reveal regimes where synthetic oversampling is more or less valuable.
+- **Targeted augmentation for rare typologies**: Rather than globally oversampling all frauds, future work could focus on augmenting specific, business‑critical fraud segments (e.g., new merchant categories, cross‑border transactions) and measuring impact at that granularity.
 ---
 
 ## 7. Conclusion
 
-We evaluated synthetic oversampling (SMOTE, CTGAN, TabDDPM) for fraud detection under leakage-safe temporal cross-validation on the IEEE-CIS dataset. Deep generative oversampling yields at most modest gains; SMOTE is a strong baseline. Recency-aware synthesis does not help and often hurts. Domain-classifier drift correlates with when CTGAN degrades performance. We recommend that future fraud-detection work report performance under temporal protocols before claiming gains from synthetic data generators.
+We study when synthetic oversampling improves or degrades rare-event fraud detection under **leakage-safe temporal** evaluation on the **IEEE-CIS** benchmark. Across four temporal folds, deep generative oversampling (**CTGAN**, **TabDDPM**) yields **moderate average gains** over the baseline but does **not** show statistically significant improvements under our paired tests (n=4). **SMOTE** remains a **competitive** and simple alternative, and **recency-aware** synthesis shows **limited or mixed** benefit: CTGAN/TabDDPM recency helps within our protocol, while **SMOTE-recency** is neutral overall but harms in some folds.
 
+To explain these patterns, we relate oversampling impact to **train–validation drift** using a **domain-classifier** signal: generator performance is more consistent with drift-dependent effects (exploratory with four folds). Finally, under a **label-delay** protocol, oversampling does not recover the performance lost when recent labeled training data are withheld.
+
+Overall, our results suggest that practitioners should treat synthetic oversampling—especially deep tabular generators—as an **evidence-driven option** rather than a default remedy for imbalance. We recommend that fraud-detection studies report performance under **time-respecting protocols** and label-delay regimes before claiming benefits from sophisticated synthetic-data generators.
 ---
 
 ## References
