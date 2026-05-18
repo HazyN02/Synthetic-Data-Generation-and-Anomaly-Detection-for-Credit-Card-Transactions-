@@ -1,0 +1,3 @@
+method,fold,tabddpm_epochs,tabddpm_timesteps,n_synth,n_real_fraud,zscore_min,zscore_max,zscore_frac_outside_10,dcr_mean,dcr_median,dcr_p95,dcr_max,explanation
+tabddpm,0,50,1000.0,100,1739,-22414.90625401275,22086.094265204538,0.9985135135135135,2174551461.526312,1914193754.1219535,5202780425.183915,8241135225.291398,"Large DCR caused by diffusion sampling outside z-score training range [-10,10]: samples are NOT clipped post-generation, so decoded values explode after inverse-transform (z*std+mean). fidelity_eval uses raw-scale L2 without re-normalising, causing DCR~10^9."
+ctgan,0,10,,100,1739,,,,5400.823545359223,3701.6121409033076,12517.635951027782,63323.28198439454,"CTGAN reference: outputs in original feature space, DCR ~10^4"

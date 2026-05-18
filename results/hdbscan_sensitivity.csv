@@ -1,0 +1,4 @@
+min_cluster_size,n_fraud_total,n_clusters_found,n_noise,noise_frac,biggest_cluster_frac,cluster_sizes,degenerate,note
+200,20663,4,7040,0.3407,0.3922,"5343,3486,3195,1599",False,HDBSCAN used
+500,20663,4,8231,0.3983,0.4172,"5187,3091,2497,1657",False,HDBSCAN used
+1000,20663,4,10396,0.5031,0.4717,"4843,2828,1347,1249",True,degenerate->KMeans fallback in canonical run
