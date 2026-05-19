@@ -1,5 +1,6 @@
 """
-Statistical tests for protocol results: paired t-test and permutation test.
+Statistical tests for protocol results: paired t-test, permutation test,
+Wilcoxon signed-rank test, and sign test.
 Used to compare methods across folds (e.g. CTGAN vs baseline, TabDDPM vs SMOTE).
 """
 from __future__ import annotations
@@ -9,6 +10,58 @@ import pandas as pd
 from typing import Tuple, Optional
 
 METRIC = "pr_auc"
+
+
+def sign_test(deltas: np.ndarray, alternative: str = "greater") -> Tuple[int, float]:
+    """
+    One-sample sign test: H0 = median(deltas) == 0.
+
+    Parameters
+    ----------
+    deltas : array of per-fold (method - baseline) differences.
+    alternative : 'greater' (one-sided, H1: median > 0),
+                  'less'    (one-sided, H1: median < 0),
+                  'two-sided'.
+
+    Returns
+    -------
+    n_positive : int   -- number of deltas > 0 (ties at 0 excluded from n)
+    p_value    : float -- exact binomial p-value
+
+    Notes
+    -----
+    Uses scipy.stats.binomtest (scipy >= 1.7) falling back to binom_test.
+    For CTGAN 150ep: n_positive=6, n=8, expected p = 0.144531.
+    """
+    d = np.asarray(deltas, dtype=float)
+    d_nonzero = d[d != 0]          # exclude exact ties at 0 per standard sign-test convention
+    n = len(d_nonzero)
+    n_pos = int((d_nonzero > 0).sum())
+    n_neg = n - n_pos
+
+    if n == 0:
+        return 0, 1.0
+
+    # scipy >= 1.7: binomtest; older: binom_test
+    try:
+        from scipy.stats import binomtest
+        if alternative == "greater":
+            result = binomtest(n_pos, n=n, p=0.5, alternative="greater")
+        elif alternative == "less":
+            result = binomtest(n_neg, n=n, p=0.5, alternative="greater")
+        else:
+            result = binomtest(min(n_pos, n_neg), n=n, p=0.5, alternative="two-sided")
+        p = float(result.pvalue)
+    except ImportError:
+        from scipy.stats import binom_test  # type: ignore[attr-defined]
+        if alternative == "greater":
+            p = float(binom_test(n_pos, n=n, p=0.5, alternative="greater"))
+        elif alternative == "less":
+            p = float(binom_test(n_neg, n=n, p=0.5, alternative="greater"))
+        else:
+            p = float(binom_test(min(n_pos, n_neg), n=n, p=0.5, alternative="two-sided"))
+
+    return n_pos, p
 
 
 def paired_t_test(

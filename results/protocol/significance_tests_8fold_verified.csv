@@ -1,5 +1,5 @@
-comparison,mean_pr_auc,baseline_pr_auc,mean_delta,p_value_wilcoxon_onesided,significant_at_0.05,n_folds,n_positive_folds,per_fold_deltas,test
-ctgan_150ep_vs_baseline,0.582219,0.578568,0.003652,0.054688,False,8,6,"[0.0105, 0.008, 0.0096, 0.0066, -0.0033, 0.0034, -0.0062, 0.0006]",wilcoxon_signed_rank_one_sided_greater
-smote_vs_baseline,0.579804,0.578568,0.001236,0.320312,False,8,5,"[0.0055, 0.0093, 0.0025, 0.0078, -0.0021, 0.004, -0.0087, -0.0085]",wilcoxon_signed_rank_one_sided_greater
-tabddpm_vs_baseline,0.575067,0.578568,-0.0035,0.875,False,8,3,"[-0.0149, 0.0001, 0.0126, -0.0058, 0.0001, -0.0119, -0.0034, -0.0049]",wilcoxon_signed_rank_one_sided_greater
-ctgan_5ep_vs_baseline,0.581579,0.578568,0.003011,0.15625,False,8,6,"[0.0102, 0.0122, 0.003, 0.003, -0.0042, 0.0075, -0.0101, 0.0024]",wilcoxon_signed_rank_one_sided_greater
+comparison,mean_pr_auc,baseline_pr_auc,mean_delta,p_value_wilcoxon_onesided,significant_at_0.05,n_folds,n_positive_folds,per_fold_deltas,test,n_positive_sign_test,p_sign_test
+ctgan_150ep_vs_baseline,0.582219,0.578568,0.003652,0.054688,False,8,6,"[0.0105, 0.008, 0.0096, 0.0066, -0.0033, 0.0034, -0.0062, 0.0006]",wilcoxon_signed_rank_one_sided_greater,6,0.144531
+smote_vs_baseline,0.579804,0.578568,0.001236,0.320312,False,8,5,"[0.0055, 0.0093, 0.0025, 0.0078, -0.0021, 0.004, -0.0087, -0.0085]",wilcoxon_signed_rank_one_sided_greater,5,0.363281
+tabddpm_vs_baseline,0.575067,0.578568,-0.0035,0.875,False,8,3,"[-0.0149, 0.0001, 0.0126, -0.0058, 0.0001, -0.0119, -0.0034, -0.0049]",wilcoxon_signed_rank_one_sided_greater,3,0.855469
+ctgan_5ep_vs_baseline,0.581579,0.578568,0.003011,0.15625,False,8,6,"[0.0102, 0.0122, 0.003, 0.003, -0.0042, 0.0075, -0.0101, 0.0024]",wilcoxon_signed_rank_one_sided_greater,6,0.144531
