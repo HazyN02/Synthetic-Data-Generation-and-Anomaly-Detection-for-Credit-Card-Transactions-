@@ -1,0 +1,2 @@
+n_seeds,n_negative,n_positive,delta_mean,delta_std,delta_min,delta_max,binomial_p,baseline_mean,baseline_std,ctgan_mean,ctgan_std,temporal_delta_mean,temporal_n_positive_folds,note
+7,7,0,-0.001259,0.000977,-0.00308,-0.000109,0.007812,0.742114,0.005495,0.740855,0.005607,0.003652,6/8,seeds_0_6_complete_seed7_stuck_killed_after_3days_seeds_8_9_not_run
