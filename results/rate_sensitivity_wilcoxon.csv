@@ -1,0 +1,4 @@
+target_rate,mean_delta,p_value,n_positive,n_folds,fold_deltas
+0.05,0.0037,0.054688,6,8,"[np.float64(0.0105), np.float64(0.008), np.float64(0.0096), np.float64(0.0066), np.float64(-0.0033), np.float64(0.0034), np.float64(-0.0062), np.float64(0.0006)]"
+0.1,-0.0009,0.769531,3,8,"[np.float64(-0.0009), np.float64(0.0033), np.float64(-0.0058), np.float64(0.0003), np.float64(-0.0), np.float64(0.0055), np.float64(-0.0081), np.float64(-0.0016)]"
+0.2,-0.0032,0.808594,3,8,"[np.float64(0.0008), np.float64(0.005), np.float64(-0.0199), np.float64(-0.0017), np.float64(-0.0069), np.float64(0.0047), np.float64(-0.0042), np.float64(-0.0035)]"
