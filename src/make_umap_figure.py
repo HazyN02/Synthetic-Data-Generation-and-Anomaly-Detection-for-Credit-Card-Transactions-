@@ -121,23 +121,30 @@ else:
     print(f"[UMAP] Computed & cached embedding {embedding.shape}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 4. NN index on real fraud (shared by CTGAN & TVAE routing)
+# 4. NN index on real fraud — exclude noise (-1) to match Table 10 methodology
 # ═══════════════════════════════════════════════════════════════════════════════
+# Noise-labelled samples are excluded from the NN reference so routing is only
+# to valid clusters (0-3), consistent with run_cluster_analysis_hdbscan.py.
+in_cluster_mask   = cluster_labels != -1
+fraud_matrix_nn   = fraud_matrix_al[in_cluster_mask]
+cluster_labels_nn = cluster_labels[in_cluster_mask]
+print(f"[UMAP] NN reference: {fraud_matrix_nn.shape[0]} in-cluster fraud "
+      f"(excluded {(~in_cluster_mask).sum()} noise samples)")
+
 nn = NearestNeighbors(n_neighbors=1, metric="euclidean", n_jobs=1)
-nn.fit(fraud_matrix_al)
+nn.fit(fraud_matrix_nn)
 
 def _scale_and_route(synth_df):
-    """Scale synth cont cols with shared scaler, route via NN, project into UMAP."""
+    """Scale synth cont cols with shared scaler, route via NN (no noise), project into UMAP."""
     sc = pd.DataFrame(0.0, index=range(len(synth_df)), columns=cont_cols)
     for c in cont_cols:
         if c in synth_df.columns:
             sc[c] = synth_df[c].values
-    mat = scaler.transform(sc.fillna(0).values)
-    _, idx = nn.kneighbors(mat)
-    labels = cluster_labels[idx.flatten()]
+    mat  = scaler.transform(sc.fillna(0).values)
+    dist, idx = nn.kneighbors(mat)
+    labels = cluster_labels_nn[idx.flatten()]   # index into noise-excluded reference
     proj   = reducer.transform(mat)
-    dist   = nn.kneighbors(mat)[0].flatten()
-    return mat, labels, proj, dist
+    return mat, labels, proj, dist.flatten()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 5. CTGAN synthetics (cached)
