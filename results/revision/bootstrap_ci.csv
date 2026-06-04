@@ -1,0 +1,2 @@
+n_folds,observed_mean_delta,delta_std,bootstrap_ci_lower,bootstrap_ci_upper,wilcoxon_p_onesided,permutation_p_onesided,mde_80pct_power,mde_90pct_power,cohens_d,retrospective_power,n_folds_needed_80pct_power,n_folds_needed_95pct_power
+8,0.00365,0.006149,-0.000475,0.007412,0.054688,0.05762,0.005405,0.006362,0.5936,0.5136,18,31
