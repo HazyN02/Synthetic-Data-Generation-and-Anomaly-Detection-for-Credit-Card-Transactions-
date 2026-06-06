@@ -41,8 +41,9 @@ from src.synth_ctgan import make_synthetic_positives
 PARQUET_PATH  = os.path.join(_ROOT, "data", "train_merged.parquet")
 OUT_DIR       = os.path.join(_ROOT, "results", "revision")
 CHECKPOINT    = os.path.join(OUT_DIR, "checkpoint_ab.json")
-COLS_TO_READ  = 100
+COLS_TO_READ  = 75   # reduced to avoid OOM on large fold training sets
 CTGAN_EPOCHS  = 150
+CTGAN_BATCH   = 250   # reduced to ease memory pressure on large folds
 TARGET_RATE   = 0.05
 
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -126,6 +127,9 @@ def run_xgb_pr(X_tr, y_tr, X_te, y_te):
 
 # ── LogReg ────────────────────────────────────────────────────────────────────
 def run_logreg_pr(X_tr, y_tr, X_te, y_te):
+    # Replace NaN/inf with 0 before LogReg (can't handle missing)
+    X_tr = np.nan_to_num(X_tr, nan=0.0, posinf=0.0, neginf=0.0)
+    X_te = np.nan_to_num(X_te, nan=0.0, posinf=0.0, neginf=0.0)
     clf = LogisticRegression(
         class_weight="balanced", max_iter=1000,
         C=0.1, random_state=42, n_jobs=1,
@@ -177,9 +181,12 @@ def run_experiment_a(df_raw, ck):
                 continue
 
             t0 = time.time()
-            # Preprocess
+            gc.collect()
+            # Preprocess — work on copies then free originals
             train_proc, used_cols = preprocess_for_synth(train_df)
+            del train_df; gc.collect()
             val_proc,   _         = preprocess_for_synth(val_df)
+            del val_df; gc.collect()
             cat_cols = get_cat_cols_for_synth(train_proc, used_cols)
             feat_cols = [c for c in used_cols if c != TARGET_COL]
 
@@ -203,17 +210,20 @@ def run_experiment_a(df_raw, ck):
             synth_df = make_synthetic_positives(
                 train_df=train_proc, cat_cols=cat_cols, used_cols=used_cols,
                 target_pos_rate=TARGET_RATE, epochs=CTGAN_EPOCHS,
-                batch_size=500, discriminator_steps=5, pac=1, seed=0, verbose=False,
+                batch_size=CTGAN_BATCH, discriminator_steps=5, pac=1, seed=0, verbose=False,
             )
             if len(synth_df) > 0:
                 synth_proc = synth_df[feat_cols].copy()
+                del synth_df; gc.collect()
                 if cat_pres:
                     synth_proc[cat_pres] = enc.transform(synth_proc[cat_pres].astype(str))
                 X_aug = np.vstack([X_tr, synth_proc.values.astype(float)])
-                y_aug = np.concatenate([y_tr, np.ones(len(synth_df), dtype=int)])
+                del synth_proc; gc.collect()
+                y_aug = np.concatenate([y_tr, np.ones(X_aug.shape[0] - len(X_tr), dtype=int)])
+                n_synth = X_aug.shape[0] - len(X_tr)
                 ctgan_pr = run_lgbm_pr(X_aug, y_aug, X_va, y_va)
+                del X_aug, y_aug; gc.collect()
                 delta = ctgan_pr - baseline_pr
-                n_synth = len(synth_df)
             else:
                 ctgan_pr = np.nan
                 delta = np.nan
@@ -258,24 +268,29 @@ def run_experiment_a(df_raw, ck):
 def run_experiment_b(df_raw, ck):
     print("\n=== EXPERIMENT B: Multi-classifier robustness ===")
     folds = get_temporal_folds(df_raw, n_folds=8, time_col=TIME_COL)
+    # Extract fold data before freeing df_raw to save memory on large folds
+    fold_data = [(fi["fold"], fi["train_df"].copy(), fi["val_df"].copy()) for fi in folds]
+    del df_raw, folds; gc.collect()
+
     all_rows = []
     done_key = "B_done_folds"
     done_folds = set(ck.get(done_key, []))
 
-    for fold_info in folds:
-        k = fold_info["fold"]
+    for k, train_df, val_df in fold_data:
         if k in done_folds:
             print(f"  fold {k}: skipping (done)")
             saved = ck.get(f"B_fold_{k}", [])
             all_rows.extend(saved)
+            del train_df, val_df; gc.collect()
             continue
 
         t0 = time.time()
-        train_df = fold_info["train_df"]
-        val_df   = fold_info["val_df"]
+        gc.collect()
 
         train_proc, used_cols = preprocess_for_synth(train_df)
+        del train_df; gc.collect()
         val_proc,   _         = preprocess_for_synth(val_df)
+        del val_df; gc.collect()
         cat_cols  = get_cat_cols_for_synth(train_proc, used_cols)
         feat_cols = [c for c in used_cols if c != TARGET_COL]
 
@@ -302,7 +317,7 @@ def run_experiment_b(df_raw, ck):
         synth_df = make_synthetic_positives(
             train_df=train_proc, cat_cols=cat_cols, used_cols=used_cols,
             target_pos_rate=TARGET_RATE, epochs=CTGAN_EPOCHS,
-            batch_size=500, discriminator_steps=5, pac=1, seed=0, verbose=False,
+            batch_size=CTGAN_BATCH, discriminator_steps=5, pac=1, seed=0, verbose=False,
         )
 
         fold_rows = []
