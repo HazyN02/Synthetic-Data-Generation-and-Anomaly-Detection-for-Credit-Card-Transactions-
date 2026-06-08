@@ -1,0 +1,212 @@
+{
+  "fold7_result": {
+    "fold": 7,
+    "n_fraud_val": 2387,
+    "n_synth": 8389,
+    "baseline_pr": 0.502833,
+    "ctgan_pr": 0.506051,
+    "delta": 0.003219
+  },
+  "xgb_sens_12": {
+    "0": {
+      "fold": 0,
+      "n_fraud_val": 1085,
+      "n_synth": 1043,
+      "baseline_pr": 0.49464,
+      "ctgan_pr": 0.489719,
+      "delta": -0.004922,
+      "n_folds": 12
+    },
+    "1": {
+      "fold": 1,
+      "n_fraud_val": 1146,
+      "n_synth": 2292,
+      "baseline_pr": 0.449914,
+      "ctgan_pr": 0.473236,
+      "delta": 0.023323,
+      "n_folds": 12
+    },
+    "2": {
+      "fold": 2,
+      "n_fraud_val": 1699,
+      "n_synth": 3476,
+      "baseline_pr": 0.573127,
+      "ctgan_pr": 0.569534,
+      "delta": -0.003593,
+      "n_folds": 12
+    },
+    "3": {
+      "fold": 3,
+      "n_fraud_val": 1902,
+      "n_synth": 4079,
+      "baseline_pr": 0.540545,
+      "ctgan_pr": 0.535933,
+      "delta": -0.004612,
+      "n_folds": 12
+    },
+    "4": {
+      "fold": 4,
+      "n_fraud_val": 1966,
+      "n_synth": 4467,
+      "baseline_pr": 0.607052,
+      "ctgan_pr": 0.620999,
+      "delta": 0.013947,
+      "n_folds": 12
+    },
+    "5": {
+      "fold": 5,
+      "n_fraud_val": 1728,
+      "n_synth": 4789,
+      "baseline_pr": 0.563084,
+      "ctgan_pr": 0.562959,
+      "delta": -0.000125,
+      "n_folds": 12
+    },
+    "6": {
+      "fold": 6,
+      "n_fraud_val": 1467,
+      "n_synth": 5361,
+      "baseline_pr": 0.474069,
+      "ctgan_pr": 0.479627,
+      "delta": 0.005558,
+      "n_folds": 12
+    },
+    "7": {
+      "fold": 7,
+      "n_fraud_val": 2079,
+      "n_synth": 6207,
+      "baseline_pr": 0.592895,
+      "ctgan_pr": 0.596326,
+      "delta": 0.003431,
+      "n_folds": 12
+    },
+    "8": {
+      "fold": 8,
+      "n_fraud_val": 1672,
+      "n_synth": 6410,
+      "baseline_pr": 0.569129,
+      "ctgan_pr": 0.577113,
+      "delta": 0.007984,
+      "n_folds": 12
+    },
+    "9": {
+      "fold": 9,
+      "n_fraud_val": 1480,
+      "n_synth": 7041,
+      "baseline_pr": 0.485391,
+      "ctgan_pr": 0.478663,
+      "delta": -0.006728,
+      "n_folds": 12
+    },
+    "10": {
+      "fold": 10,
+      "n_fraud_val": 1401,
+      "n_synth": 7874,
+      "baseline_pr": 0.509272,
+      "ctgan_pr": 0.52102,
+      "delta": 0.011748,
+      "n_folds": 12
+    },
+    "11": {
+      "fold": 11,
+      "n_fraud_val": 1758,
+      "n_synth": 8790,
+      "baseline_pr": 0.55535,
+      "ctgan_pr": 0.553955,
+      "delta": -0.001395,
+      "n_folds": 12
+    }
+  },
+  "xgb_sens_15": {
+    "0": {
+      "fold": 0,
+      "n_fraud_val": 932,
+      "n_synth": 830,
+      "baseline_pr": 0.397968,
+      "ctgan_pr": 0.446694,
+      "delta": 0.048726,
+      "n_folds": 15
+    },
+    "1": {
+      "fold": 1,
+      "n_fraud_val": 733,
+      "n_synth": 1792,
+      "baseline_pr": 0.491972,
+      "ctgan_pr": 0.477651,
+      "delta": -0.01432,
+      "n_folds": 15
+    },
+    "2": {
+      "fold": 2,
+      "n_fraud_val": 1167,
+      "n_synth": 2963,
+      "baseline_pr": 0.516886,
+      "ctgan_pr": 0.533756,
+      "delta": 0.01687,
+      "n_folds": 15
+    },
+    "3": {
+      "fold": 3,
+      "n_fraud_val": 1441,
+      "n_synth": 3677,
+      "baseline_pr": 0.57878,
+      "ctgan_pr": 0.584298,
+      "delta": 0.005518,
+      "n_folds": 15
+    },
+    "4": {
+      "fold": 4,
+      "n_fraud_val": 1573,
+      "n_synth": 4103,
+      "baseline_pr": 0.554422,
+      "ctgan_pr": 0.557799,
+      "delta": 0.003377,
+      "n_folds": 15
+    },
+    "5": {
+      "fold": 5,
+      "n_fraud_val": 1600,
+      "n_synth": 4390,
+      "baseline_pr": 0.629468,
+      "ctgan_pr": 0.642016,
+      "delta": 0.012548,
+      "n_folds": 15
+    },
+    "6": {
+      "fold": 6,
+      "n_fraud_val": 1392,
+      "n_synth": 4648,
+      "baseline_pr": 0.601837,
+      "ctgan_pr": 0.59989,
+      "delta": -0.001947,
+      "n_folds": 15
+    },
+    "7": {
+      "fold": 7,
+      "n_fraud_val": 1321,
+      "n_synth": 5125,
+      "baseline_pr": 0.527377,
+      "ctgan_pr": 0.515029,
+      "delta": -0.012348,
+      "n_folds": 15
+    },
+    "8": {
+      "fold": 8,
+      "n_fraud_val": 1294,
+      "n_synth": 5677,
+      "baseline_pr": 0.496294,
+      "ctgan_pr": 0.504201,
+      "delta": 0.007907,
+      "n_folds": 15
+    },
+    "9": {
+      "fold": 9,
+      "n_fraud_val": 1707,
+      "n_synth": 6258,
+      "baseline_pr": 0.60691,
+      "ctgan_pr": 0.61417,
+      "delta": 0.00726,
+      "n_folds": 15
+    }
+  }
+}
